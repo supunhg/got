@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"io"
+	"log/slog"
 	"os"
 	"time"
 
@@ -82,6 +83,13 @@ type Deps struct {
 	// Stdout and Stderr are where commands write their output.
 	Stdout io.Writer
 	Stderr io.Writer
+	// Logger is the *slog.Logger the command tree uses for
+	// structured diagnostic output (spec §16). It is set in
+	// main.go based on --log-level / --log-format and the TTY
+	// state. The TUI commands (got tui, dashboards) ignore this
+	// field and use a discard logger so the dashboard never
+	// writes to stderr. If nil, log.Default() is used.
+	Logger *slog.Logger
 }
 
 // defaultDeps returns the production Deps: a real ExecAdapter factory

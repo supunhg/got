@@ -90,6 +90,9 @@ If [path] is omitted, the current directory is used.`,
 // it can be exercised from tests without going through the command
 // tree.
 func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
+	if deps.Logger != nil {
+		deps.Logger.Info("init starting", "opts", optsLogFields(opts))
+	}
 	// 1. Resolve target. --here is the same as no path; path arg
 	//    wins over --here if both are set.
 	target := opts.target
@@ -264,4 +267,24 @@ func applyInit(deps Deps, workTree string, a initwiz.Answers, force bool) error 
 	fmt.Fprintf(out, "  - %s\n", paths.DBFile)
 	fmt.Fprintln(out, "Next: try `got status`.")
 	return nil
+}
+
+// optsLogFields renders the init options as a flat map[string]any
+// suitable for slog attribute logging. Sensitive or noisy fields
+// (customTemplate) are intentionally omitted; the rest are useful
+// for the spec §16 "operation started/finished" debug line.
+func optsLogFields(opts *initOptions) map[string]any {
+	if opts == nil {
+		return nil
+	}
+	return map[string]any{
+		"target":     opts.target,
+		"here":       opts.here,
+		"name":       opts.name,
+		"branch":     opts.branch,
+		"style":      opts.style,
+		"force":      opts.force,
+		"noTUI":      opts.noTUI,
+		"noInteract": opts.noInteractive,
+	}
 }

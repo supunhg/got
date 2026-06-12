@@ -7,6 +7,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -73,6 +74,9 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.Stderr != nil {
 		d.Stderr = deps.Stderr
 	}
+	if deps.Logger != nil {
+		d.Logger = deps.Logger
+	}
 
 	cmd := &cobra.Command{
 		Use:   "got",
@@ -99,7 +103,8 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.String("cwd", "", "operate on a different directory")
 	pf.Bool("no-color", false, "disable lip gloss styles")
 	pf.Bool("no-tui", false, "force plain CLI output even in wizards (CI-friendly)")
-	pf.String("log-level", "warn", "log level: debug|info|warn|error")
+	pf.String("log-level", "warn", "log level: debug|info|warn|error (overrides the spec §16 default)")
+	pf.String("log-format", "text", "log output format: text|json")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
 
 	// Default the context so subcommands can read cmd.Context().
@@ -130,10 +135,10 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	return cmd
 }
 
-// Execute runs the root command with the default dependencies. It is
-// the single entry point used by cmd/got/main.go. Errors are written
-// to stderr via gerr.UserMessage and the exit code is set per
-// got-spec.md §15.
+// Execute runs the root command with the default dependencies and
+// the provided logger. It is the single entry point used by
+// cmd/got/main.go. Errors are written to stderr via gerr.UserMessage
+// and the exit code is set per got-spec.md §15.
 //
 // Cobra's command tree returns pflag errors (unknown flag, bad flag
 // value, etc.) as plain *flag.Error values, which gerr.ExitCode would
@@ -141,8 +146,16 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 // errors and should map to CodeUsage (2): we wrap them here so the
 // exit code is right. Any other non-gerr error is wrapped as a
 // generic gerr.Error so the main entry point can rely on errors.As.
-func Execute() error {
-	err := NewRootCmd(defaultDeps()).Execute()
+//
+// logger may be nil, in which case slog.Default() is used. Per
+// spec §16, the TUI commands install a discard logger so the
+// dashboard never writes to stderr.
+func Execute(logger *slog.Logger) error {
+	deps := defaultDeps()
+	if logger != nil {
+		deps.Logger = logger
+	}
+	err := NewRootCmd(deps).Execute()
 	return wrapExecuteError(err)
 }
 
