@@ -120,6 +120,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.String("log-file", "", "also append every log record to this file (created if missing)")
 	pf.String("log-file-mode", "0600", "permissions for --log-file (octal, e.g. 0600, 0640)")
 	pf.Int64("log-max-size", 0, "rotate --log-file when it exceeds this many megabytes (0 disables)")
+	pf.Bool("log-compress", false, "gzip-compress rotated backups (--log-file.1 becomes --log-file.1.gz)")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
 
 	// Default the context so subcommands can read cmd.Context().

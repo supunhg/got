@@ -68,7 +68,7 @@ func TestSessionLog_BytesStatsPlainFile(t *testing.T) {
 func TestSessionLog_RotationsDelegatesToRotator(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	rotator, err := OpenRotatingFile(path, 1, 0o600)
+	rotator, err := OpenRotatingFile(path, 1, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestSessionLog_SummaryNoRotation(t *testing.T) {
 func TestSessionLog_SummaryWithRotations(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	rotator, err := OpenRotatingFile(path, 1, 0o600)
+	rotator, err := OpenRotatingFile(path, 1, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestSessionLog_SummaryWithOneRotation(t *testing.T) {
 	// Singular "rotation" when count == 1.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	rotator, err := OpenRotatingFile(path, 1, 0o600)
+	rotator, err := OpenRotatingFile(path, 1, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}

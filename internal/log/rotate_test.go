@@ -2,6 +2,7 @@ package log
 
 import (
 	"bytes"
+	"compress/gzip"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ func TestRotatingFile_AppendsToExistingFile(t *testing.T) {
 	if err := os.WriteFile(path, []byte("pre-existing\n"), 0o600); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	r, err := OpenRotatingFile(path, 0, 0o600) // 0 = no rotation
+	r, err := OpenRotatingFile(path, 0, 0o600, false) // 0 = no rotation
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -42,7 +43,7 @@ func TestRotatingFile_RotatesWhenSizeExceeded(t *testing.T) {
 	// rotation. The size check is "bytes + len(p) > maxBytes"
 	// so we want the first write to fit and the second to push
 	// past.
-	r, err := OpenRotatingFile(path, 5, 0o600)
+	r, err := OpenRotatingFile(path, 5, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -78,7 +79,7 @@ func TestRotatingFile_RotatesWhenSizeExceeded(t *testing.T) {
 func TestRotatingFile_MultipleRotationsOverwriteBackup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 1, 0o600)
+	r, err := OpenRotatingFile(path, 1, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -115,7 +116,7 @@ func TestRotatingFile_MultipleRotationsOverwriteBackup(t *testing.T) {
 func TestRotatingFile_EmptyWriteIsNoop(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 100, 0o600)
+	r, err := OpenRotatingFile(path, 100, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestRotatingFile_ConcurrentWritesDoNotPanic(t *testing.T) {
 	// Small maxBytes forces many rotations under concurrent
 	// writers; the mutex guarantees exactly-one rotation per
 	// threshold crossing.
-	r, err := OpenRotatingFile(path, 64, 0o600)
+	r, err := OpenRotatingFile(path, 64, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -166,7 +167,7 @@ func TestRotatingFile_ConcurrentWritesDoNotPanic(t *testing.T) {
 func TestRotatingFile_CloseMakesWriteError(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o600)
+	r, err := OpenRotatingFile(path, 0, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestRotatingFile_CloseMakesWriteError(t *testing.T) {
 func TestRotatingFile_CloseIsIdempotent(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o600)
+	r, err := OpenRotatingFile(path, 0, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -200,7 +201,7 @@ func TestRotatingFile_CloseIsIdempotent(t *testing.T) {
 func TestRotatingFile_PathReturnsConfiguredPath(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o600)
+	r, err := OpenRotatingFile(path, 0, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestRotatingFile_PathReturnsConfiguredPath(t *testing.T) {
 }
 
 func TestOpenRotatingFile_RejectsEmptyPath(t *testing.T) {
-	if _, err := OpenRotatingFile("", 100, 0o600); err == nil {
+	if _, err := OpenRotatingFile("", 100, 0o600, false); err == nil {
 		t.Error("expected error for empty path")
 	}
 }
@@ -219,7 +220,7 @@ func TestOpenRotatingFile_RejectsEmptyPath(t *testing.T) {
 func TestOpenRotatingFile_RejectsNegativeMaxBytes(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	if _, err := OpenRotatingFile(path, -1, 0o600); err == nil {
+	if _, err := OpenRotatingFile(path, -1, 0o600, false); err == nil {
 		t.Error("expected error for negative maxBytes")
 	}
 }
@@ -227,7 +228,7 @@ func TestOpenRotatingFile_RejectsNegativeMaxBytes(t *testing.T) {
 func TestRotatingFile_RotationsStartsAtZero(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o600)
+	r, err := OpenRotatingFile(path, 0, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -240,7 +241,7 @@ func TestRotatingFile_RotationsStartsAtZero(t *testing.T) {
 func TestRotatingFile_RotationsCount(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 1, 0o600)
+	r, err := OpenRotatingFile(path, 1, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -267,7 +268,7 @@ func TestRotatingFile_SizeTracksBytes(t *testing.T) {
 	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	r, err := OpenRotatingFile(path, 0, 0o600) // 0 = no rotation
+	r, err := OpenRotatingFile(path, 0, 0o600, false) // 0 = no rotation
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -286,7 +287,7 @@ func TestRotatingFile_SizeTracksBytes(t *testing.T) {
 func TestRotatingFile_SizeResetsAfterRotation(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 5, 0o600)
+	r, err := OpenRotatingFile(path, 5, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -330,7 +331,7 @@ func TestRotatingFile_IntegratesWithTee(t *testing.T) {
 	// rotating file and a buffer.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 50, 0o600)
+	r, err := OpenRotatingFile(path, 50, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -356,7 +357,7 @@ func TestRotatingFile_IntegratesWithTee(t *testing.T) {
 func TestRotatingFile_CreatesFileWithCustomMode(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o640)
+	r, err := OpenRotatingFile(path, 0, 0o640, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -378,7 +379,7 @@ func TestRotatingFile_DefaultModeIs600(t *testing.T) {
 	// uses) creates a 0600 file.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 0, 0o600)
+	r, err := OpenRotatingFile(path, 0, 0o600, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -400,7 +401,7 @@ func TestRotatingFile_RotationPreservesMode(t *testing.T) {
 	// with the same mode the original was opened with.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 3, 0o640)
+	r, err := OpenRotatingFile(path, 3, 0o640, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -435,7 +436,7 @@ func TestOpenRotatingFile_MasksNonPermissionBits(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
 	// 0o7700 = setuid+setgid+sticky + 0700. Should be masked to 0o700.
-	r, err := OpenRotatingFile(path, 0, 0o7700)
+	r, err := OpenRotatingFile(path, 0, 0o7700, false)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -449,5 +450,121 @@ func TestOpenRotatingFile_MasksNonPermissionBits(t *testing.T) {
 	}
 	if got := info.Mode().Perm(); got != 0o700 {
 		t.Errorf("file perms = %o, want 0700 (upper bits masked)", got)
+	}
+}
+
+func TestRotatingFile_CompressRotatedBackup(t *testing.T) {
+	// With compress=true, rotation should produce a .gz file
+	// and remove the uncompressed .1.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 3, 0o600, true)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	// 0+3=3 > 3? No. 3+3=6 > 3? Yes. Rotate.
+	if _, err := r.Write([]byte("AAA")); err != nil {
+		t.Fatalf("Write 1: %v", err)
+	}
+	if _, err := r.Write([]byte("BBB")); err != nil {
+		t.Fatalf("Write 2: %v", err)
+	}
+	// .gz should exist.
+	if _, err := os.Stat(path + ".1.gz"); err != nil {
+		t.Errorf("expected .1.gz to exist: %v", err)
+	}
+	// .1 should NOT exist.
+	if _, err := os.Stat(path + ".1"); !os.IsNotExist(err) {
+		t.Errorf("expected .1 to NOT exist, got stat err: %v", err)
+	}
+}
+
+func TestRotatingFile_CompressedBackupDecompresses(t *testing.T) {
+	// The .gz file should be a valid gzip file that, when
+	// decompressed, yields the content of the file BEFORE
+	// rotation. Use a small maxBytes to make the rotation
+	// trigger easy to predict.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 5, 0o600, true)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	// Write 1: "AAA" (3 bytes), fits in the 5-byte limit.
+	if _, err := r.Write([]byte("AAA")); err != nil {
+		t.Fatalf("Write 1: %v", err)
+	}
+	// Write 2: "BBB" (3 bytes). 3+3=6 > 5, triggers rotation.
+	// "AAA" goes to .1.gz; "BBB" goes to the fresh file.
+	if _, err := r.Write([]byte("BBB")); err != nil {
+		t.Fatalf("Write 2: %v", err)
+	}
+	gz, err := os.ReadFile(path + ".1.gz")
+	if err != nil {
+		t.Fatalf("ReadFile .gz: %v", err)
+	}
+	gr, err := gzip.NewReader(bytes.NewReader(gz))
+	if err != nil {
+		t.Fatalf("gzip.NewReader: %v", err)
+	}
+	defer gr.Close()
+	decompressed, err := io.ReadAll(gr)
+	if err != nil {
+		t.Fatalf("io.ReadAll: %v", err)
+	}
+	want := "AAA"
+	if string(decompressed) != want {
+		t.Errorf("decompressed = %q, want %q", decompressed, want)
+	}
+}
+
+func TestRotatingFile_NoCompressLeavesBackupUncompressed(t *testing.T) {
+	// With compress=false (the default), rotation should
+	// leave the .1 file uncompressed and NOT create a .gz.
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 3, 0o600, false)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	if _, err := r.Write([]byte("AAA")); err != nil {
+		t.Fatalf("Write 1: %v", err)
+	}
+	if _, err := r.Write([]byte("BBB")); err != nil {
+		t.Fatalf("Write 2: %v", err)
+	}
+	if _, err := os.Stat(path + ".1"); err != nil {
+		t.Errorf("expected .1 to exist: %v", err)
+	}
+	if _, err := os.Stat(path + ".1.gz"); !os.IsNotExist(err) {
+		t.Errorf("expected .1.gz to NOT exist, got stat err: %v", err)
+	}
+}
+
+func TestRotatingFile_CompressPreservesMode(t *testing.T) {
+	// The .gz file should have the same perms as the original
+	// (0o640 in this case).
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 3, 0o640, true)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	if _, err := r.Write([]byte("AAA")); err != nil {
+		t.Fatalf("Write 1: %v", err)
+	}
+	if _, err := r.Write([]byte("BBB")); err != nil {
+		t.Fatalf("Write 2: %v", err)
+	}
+	info, err := os.Stat(path + ".1.gz")
+	if err != nil {
+		t.Fatalf("Stat .gz: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o640 {
+		t.Errorf(".gz file perms = %o, want 0640", got)
 	}
 }

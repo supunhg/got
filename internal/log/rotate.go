@@ -1,6 +1,7 @@
 package log
 
 import (
+	"compress/gzip"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +29,7 @@ type RotatingFile struct {
 	path      string
 	maxBytes  int64
 	mode      os.FileMode
+	compress  bool
 	mu        sync.Mutex
 	f         *os.File
 	bytes     int64
@@ -50,6 +52,17 @@ type RotatingFile struct {
 // (e.g. 0 would create an unreadable file, which is the
 // caller's responsibility to avoid).
 //
+// compress controls what happens to the rotated backup. When
+// false (the default), the backup is left uncompressed at
+// <path>.1. When true, the backup is gzipped to <path>.1.gz
+// and the uncompressed <path>.1 is removed. The compression
+// is best-effort: if it fails, the uncompressed backup is
+// retained and the error is returned from the Write call that
+// triggered rotation (the writer itself remains functional).
+// This is the right behavior for long-running CI jobs that
+// care more about disk space than about catching every
+// compression error.
+//
 // The returned RotatingFile holds an open file descriptor. The
 // caller must call Close to release it. For short-lived CLI
 // processes the OS reclaims the fd on exit, so the documented
@@ -57,7 +70,7 @@ type RotatingFile struct {
 // intentionally not close it and let the process exit clean it
 // up. Close is still exposed for tests and for callers that want
 // the explicit lifecycle.
-func OpenRotatingFile(path string, maxBytes int64, mode os.FileMode) (*RotatingFile, error) {
+func OpenRotatingFile(path string, maxBytes int64, mode os.FileMode, compress bool) (*RotatingFile, error) {
 	if path == "" {
 		return nil, fmt.Errorf("log: RotatingFile path must not be empty")
 	}
@@ -81,6 +94,7 @@ func OpenRotatingFile(path string, maxBytes int64, mode os.FileMode) (*RotatingF
 		path:     path,
 		maxBytes: maxBytes,
 		mode:     mode,
+		compress: compress,
 		f:        f,
 		bytes:    info.Size(),
 	}, nil
@@ -181,10 +195,17 @@ func (r *RotatingFile) Rotations() int64 {
 
 // rotateLocked performs the rename-and-reopen dance. Caller must
 // hold r.mu. The existing fd is closed, the file is renamed to
-// path+".1" (overwriting any previous .1), and a fresh fd is
-// opened at path. The new file is created with the same mode
-// the original was opened with (r.mode), so the user's
+// path+".1" (overwriting any previous .1), optionally gzipped
+// to path+".1.gz" (if r.compress), and a fresh fd is opened at
+// path. The new file is created with the same mode the
+// original was opened with (r.mode), so the user's
 // --log-file-mode setting persists across rotations.
+//
+// If compression is requested and fails, the error is returned
+// but the writer is left functional: the fresh file is already
+// opened, subsequent Writes succeed, and the uncompressed .1
+// is retained (the next rotation will overwrite it anyway).
+// This matches the spec §16 "best-effort log" contract.
 func (r *RotatingFile) rotateLocked() error {
 	if err := r.f.Close(); err != nil {
 		return fmt.Errorf("log: close before rotate: %w", err)
@@ -204,6 +225,15 @@ func (r *RotatingFile) rotateLocked() error {
 		r.f = f
 		return fmt.Errorf("log: rename %s -> %s: %w", r.path, backup, err)
 	}
+	// Compress the backup if requested. Failure here is
+	// reported via the returned error but the writer is
+	// still opened below so the next Write can succeed.
+	var compressErr error
+	if r.compress {
+		if err := r.compressBackup(backup); err != nil {
+			compressErr = fmt.Errorf("log: compress backup %q: %w", backup, err)
+		}
+	}
 	f, err := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, r.mode)
 	if err != nil {
 		return fmt.Errorf("log: reopen %s after rotate: %w", r.path, err)
@@ -211,6 +241,47 @@ func (r *RotatingFile) rotateLocked() error {
 	r.f = f
 	r.bytes = 0
 	r.rotations++
+	return compressErr
+}
+
+// compressBackup reads srcPath, writes a gzipped copy to
+// srcPath+".gz", and removes the original. The .gz file is
+// created with the same mode the original was opened with
+// (r.mode) so --log-file-mode applies to backups too. Caller
+// must hold r.mu.
+func (r *RotatingFile) compressBackup(srcPath string) error {
+	in, err := os.Open(srcPath)
+	if err != nil {
+		return fmt.Errorf("open source: %w", err)
+	}
+	defer in.Close()
+	out, err := os.OpenFile(srcPath+".gz", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, r.mode)
+	if err != nil {
+		return fmt.Errorf("open destination: %w", err)
+	}
+	gz := gzip.NewWriter(out)
+	_, copyErr := io.Copy(gz, in)
+	closeErr := gz.Close()
+	outCloseErr := out.Close()
+	// If any step failed, the .gz file may be incomplete or
+	// the source may still be there. We report the first
+	// error and let the caller decide what to do (rotateLocked
+	// will return this error but the writer stays functional).
+	if copyErr != nil {
+		return fmt.Errorf("gzip copy: %w", copyErr)
+	}
+	if closeErr != nil {
+		return fmt.Errorf("gzip close: %w", closeErr)
+	}
+	if outCloseErr != nil {
+		return fmt.Errorf("close destination: %w", outCloseErr)
+	}
+	// Compression succeeded; remove the uncompressed source
+	// so the on-disk state is "<path>.gz only", matching the
+	// documentation in the OpenRotatingFile doc comment.
+	if err := os.Remove(srcPath); err != nil {
+		return fmt.Errorf("remove uncompressed source: %w", err)
+	}
 	return nil
 }
 

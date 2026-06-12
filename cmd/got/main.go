@@ -108,6 +108,7 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, 
 		logFile     string
 		logMaxSize  int64
 		logFileMode string
+		logCompress bool
 	)
 	fs.StringVar(&level, "log-level", "", "log level: debug|info|warn|error")
 	fs.StringVar(&format, "log-format", gotlog.FormatText, "log output format: text|json")
@@ -115,6 +116,7 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, 
 	fs.StringVar(&logFile, "log-file", "", "also append every log record to this file (created if missing)")
 	fs.Int64Var(&logMaxSize, "log-max-size", 0, "rotate --log-file when it exceeds this many megabytes (0 disables)")
 	fs.StringVar(&logFileMode, "log-file-mode", "0600", "permissions for --log-file (octal, e.g. 0600, 0640)")
+	fs.BoolVar(&logCompress, "log-compress", false, "gzip-compress rotated backups (--log-file.1 becomes --log-file.1.gz)")
 	_ = fs.Parse(args)
 
 	// Parse --log-file-mode as octal. Using base 8 (not 0) so
@@ -148,7 +150,7 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, 
 		var plainFile *os.File
 		var ferr error
 		if logMaxSize > 0 {
-			rotator, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024, fileMode)
+			rotator, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024, fileMode, logCompress)
 			fileWriter = rotator
 		} else {
 			plainFile, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
