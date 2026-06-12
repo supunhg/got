@@ -5,18 +5,35 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/version"
 )
 
 // NewRootCmd builds the root `got` command with all persistent flags and
 // the v0.1 subcommand stubs. It is exposed for tests that want to drive
-// the command tree without going through main().
-func NewRootCmd() *cobra.Command {
+// the command tree without going through main(). Nil fields in deps are
+// filled in from defaultDeps().
+func NewRootCmd(deps Deps) *cobra.Command {
+	d := defaultDeps()
+	if deps.AdapterFor != nil {
+		d.AdapterFor = deps.AdapterFor
+	}
+	if deps.Discover != nil {
+		d.Discover = deps.Discover
+	}
+	if deps.Stdout != nil {
+		d.Stdout = deps.Stdout
+	}
+	if deps.Stderr != nil {
+		d.Stderr = deps.Stderr
+	}
+
 	cmd := &cobra.Command{
 		Use:   "got",
 		Short: "Git-native developer operating layer",
@@ -27,8 +44,8 @@ safety mechanisms, repository intelligence, team knowledge management,
 and interactive developer experiences.
 
 Git remains the source of truth; GOT metadata lives in .got/.`,
-		Version:       version.String(),
-		SilenceUsage:  true,
+		Version:      version.String(),
+		SilenceUsage: true,
 		SilenceErrors: true,
 	}
 	// Use the version package's full string verbatim. The default Cobra
@@ -45,19 +62,30 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.String("log-level", "warn", "log level: debug|info|warn|error")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
 
-	// Subcommand stubs. Real implementations land in later scaffold steps
-	// (see got-spec.md §24). For step 1 only `version` exists.
+	// Default the context so subcommands can read cmd.Context().
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, _ []string) error {
+		if cmd.Context() == nil {
+			cmd.SetContext(context.Background())
+		}
+		return nil
+	}
+
+	// Subcommands. v0.1 has: version, status, branch, remote, tui (stub).
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newStatusCmd(d))
+	cmd.AddCommand(newBranchCmd(d))
+	cmd.AddCommand(newRemoteCmd(d))
+	cmd.AddCommand(newTUIStubCmd())
 
 	return cmd
 }
 
-// Execute runs the root command. It is the single entry point used by
-// cmd/got/main.go. Errors are written to stderr and returned for tests
-// to assert against; main() translates the error into a non-zero exit
-// code.
+// Execute runs the root command with the default dependencies. It is
+// the single entry point used by cmd/got/main.go. Errors are written
+// to stderr via gerr.UserMessage and the exit code is set per
+// got-spec.md §15.
 func Execute() error {
-	return NewRootCmd().Execute()
+	return NewRootCmd(defaultDeps()).Execute()
 }
 
 // newVersionCmd returns the `got version` subcommand. It prints the same
@@ -69,6 +97,19 @@ func newVersionCmd() *cobra.Command {
 		Args:  cobra.NoArgs,
 		Run: func(cmd *cobra.Command, _ []string) {
 			fmt.Fprintln(cmd.OutOrStdout(), version.String())
+		},
+	}
+}
+
+// newTUIStubCmd is a placeholder for the dashboard TUI. Step 9 of §24
+// will replace it with the real dashboard.
+func newTUIStubCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "tui",
+		Short: "Open the dashboard TUI (not yet implemented in v0.1)",
+		Args:  cobra.NoArgs,
+		RunE: func(*cobra.Command, []string) error {
+			return gerr.Validation("`got tui` is not yet implemented in v0.1; it lands in step 9 of got-spec.md §24")
 		},
 	}
 }

@@ -9,11 +9,12 @@ import (
 	"os"
 
 	"github.com/got-sh/got/internal/cli"
+	"github.com/got-sh/got/internal/gerr"
 )
 
 func main() {
 	if err := cli.Execute(); err != nil {
-		fmt.Fprintln(os.Stderr, "got:", err)
-		os.Exit(1)
+		fmt.Fprintln(os.Stderr, "got:", gerr.UserMessage(err))
+		os.Exit(gerr.ExitCode(err))
 	}
 }
