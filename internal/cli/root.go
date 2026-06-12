@@ -27,6 +27,21 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.Discover != nil {
 		d.Discover = deps.Discover
 	}
+	if deps.StoreFor != nil {
+		d.StoreFor = deps.StoreFor
+	}
+	if deps.Now != nil {
+		d.Now = deps.Now
+	}
+	if deps.User != nil {
+		d.User = deps.User
+	}
+	if deps.GotVersion != "" {
+		d.GotVersion = deps.GotVersion
+	} else {
+		// Default to the running binary's version string.
+		d.GotVersion = version.String()
+	}
 	if deps.Stdout != nil {
 		d.Stdout = deps.Stdout
 	}
@@ -44,8 +59,8 @@ safety mechanisms, repository intelligence, team knowledge management,
 and interactive developer experiences.
 
 Git remains the source of truth; GOT metadata lives in .got/.`,
-		Version:      version.String(),
-		SilenceUsage: true,
+		Version:       version.String(),
+		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
 	// Use the version package's full string verbatim. The default Cobra
@@ -70,8 +85,9 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 		return nil
 	}
 
-	// Subcommands. v0.1 has: version, status, branch, remote, tui (stub).
+	// Subcommands. v0.1 has: version, init, status, branch, remote, tui (stub).
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newInitCmd(d))
 	cmd.AddCommand(newStatusCmd(d))
 	cmd.AddCommand(newBranchCmd(d))
 	cmd.AddCommand(newRemoteCmd(d))

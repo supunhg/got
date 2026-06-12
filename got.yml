@@ -1,0 +1,12 @@
+version: 1
+project:
+    name: got
+    default_branch: main
+commits:
+    style: conventional
+    scopes: []
+    allow_breaking: true
+plugins:
+    enabled: []
+ai:
+    provider: heuristic
