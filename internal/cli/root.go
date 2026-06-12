@@ -45,6 +45,9 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.RunWorktreeWizard != nil {
 		d.RunWorktreeWizard = deps.RunWorktreeWizard
 	}
+	if deps.RunDashboardWizard != nil {
+		d.RunDashboardWizard = deps.RunDashboardWizard
+	}
 	if deps.DiscoverPlugins != nil {
 		d.DiscoverPlugins = deps.DiscoverPlugins
 	}
@@ -116,7 +119,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newGraphCmd(d))
 	cmd.AddCommand(newPluginCmd(d))
 	cmd.AddCommand(newWorktreeCmd(d))
-	cmd.AddCommand(newTUIStubCmd())
+	cmd.AddCommand(newTUICmd(d))
 
 	// Auto-register discovered plugins as `got <plugin-name>
 	// <command>` subcommands per spec §11. v0.1 only registers
@@ -147,15 +150,5 @@ func newVersionCmd() *cobra.Command {
 	}
 }
 
-// newTUIStubCmd is a placeholder for the dashboard TUI. Step 9 of §24
-// will replace it with the real dashboard.
-func newTUIStubCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "tui",
-		Short: "Open the dashboard TUI (not yet implemented in v0.1)",
-		Args:  cobra.NoArgs,
-		RunE: func(*cobra.Command, []string) error {
-			return gerr.Validation("`got tui` is not yet implemented in v0.1; it lands in step 9 of got-spec.md §24")
-		},
-	}
-}
+// newTUIStubCmd has been replaced by newTUICmd (see tui.go) which
+// drives the real dashboard per got-spec.md §14.

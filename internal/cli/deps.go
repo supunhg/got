@@ -8,6 +8,7 @@ import (
 
 	"github.com/got-sh/got/internal/branchwiz"
 	"github.com/got-sh/got/internal/commitwiz"
+	"github.com/got-sh/got/internal/dashwiz"
 	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/graphwiz"
 	"github.com/got-sh/got/internal/initwiz"
@@ -53,6 +54,11 @@ type Deps struct {
 	// cancels. Tests stub this to skip the real Bubbletea program;
 	// production delegates to worktreewiz.Run.
 	RunWorktreeWizard func(entries []worktreewiz.Entry, pre worktreewiz.PrePopulated, theme tui.Theme) (worktreewiz.Answers, error)
+	// RunDashboardWizard starts the interactive dashboard and
+	// blocks until the user quits. Tests stub this to skip the
+	// real Bubbletea program; production delegates to
+	// dashwiz.Run.
+	RunDashboardWizard func(ctx context.Context, inputs dashwiz.Inputs, theme tui.Theme) error
 	// DiscoverPlugins runs the plugin discovery pipeline (spec §11)
 	// and returns the list of valid plugins. Tests stub this to
 	// return canned results without scanning $PATH or .got/plugins/.
@@ -101,6 +107,9 @@ func defaultDeps() Deps {
 		},
 		RunWorktreeWizard: func(entries []worktreewiz.Entry, pre worktreewiz.PrePopulated, theme tui.Theme) (worktreewiz.Answers, error) {
 			return worktreewiz.Run(entries, pre, theme)
+		},
+		RunDashboardWizard: func(ctx context.Context, inputs dashwiz.Inputs, theme tui.Theme) error {
+			return dashwiz.Run(ctx, inputs, theme)
 		},
 		DiscoverPlugins: func(ctx context.Context) ([]plugin.DiscoveredPlugin, error) {
 			d := &plugin.Discoverer{
