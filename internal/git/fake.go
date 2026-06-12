@@ -85,6 +85,20 @@ type FakeAdapter struct {
 	GraphDOTVal     string
 	GraphDOTCalls   []FakeGraphCall
 	GraphDOTErr     error
+
+	WorktreeListVal     []Worktree
+	WorktreeListErr     error
+	WorktreeListCalls   int
+	WorktreeAddErr      error
+	WorktreeAddCalls    []FakeWorktreeAddCall
+	WorktreeRemoveErr   error
+	WorktreeRemoveCalls []FakeWorktreeRemoveCall
+	WorktreeLockErr     error
+	WorktreeLockCalls   []FakeWorktreeLockCall
+	WorktreeUnlockErr   error
+	WorktreeUnlockCalls []FakeWorktreePathCall
+	WorktreePruneErr    error
+	WorktreePruneCalls  int
 }
 
 // FakeCommitCall records arguments to a Commit call.
@@ -169,6 +183,29 @@ type FakeRemoteSetURLCall struct {
 // FakeGraphCall records arguments to a GraphASCII / GraphDOT call.
 type FakeGraphCall struct {
 	Opts GraphOpts
+}
+
+// FakeWorktreeAddCall records arguments to a WorktreeAdd call.
+type FakeWorktreeAddCall struct {
+	Path string
+	Opts WorktreeAddOpts
+}
+
+// FakeWorktreeRemoveCall records arguments to a WorktreeRemove call.
+type FakeWorktreeRemoveCall struct {
+	Path  string
+	Force bool
+}
+
+// FakeWorktreeLockCall records arguments to a WorktreeLock call.
+type FakeWorktreeLockCall struct {
+	Path   string
+	Reason string
+}
+
+// FakeWorktreePathCall records arguments to a WorktreeUnlock call.
+type FakeWorktreePathCall struct {
+	Path string
 }
 
 // NewFake returns a FakeAdapter with safe defaults: an empty Status,
@@ -322,4 +359,35 @@ func (f *FakeAdapter) GraphDOT(_ context.Context, opts GraphOpts) (string, error
 	cp := opts
 	f.GraphDOTCalls = append(f.GraphDOTCalls, FakeGraphCall{Opts: cp})
 	return f.GraphDOTVal, f.GraphDOTErr
+}
+
+func (f *FakeAdapter) WorktreeList(_ context.Context) ([]Worktree, error) {
+	f.WorktreeListCalls++
+	return f.WorktreeListVal, f.WorktreeListErr
+}
+
+func (f *FakeAdapter) WorktreeAdd(_ context.Context, path string, opts WorktreeAddOpts) error {
+	cp := opts
+	f.WorktreeAddCalls = append(f.WorktreeAddCalls, FakeWorktreeAddCall{Path: path, Opts: cp})
+	return f.WorktreeAddErr
+}
+
+func (f *FakeAdapter) WorktreeRemove(_ context.Context, path string, force bool) error {
+	f.WorktreeRemoveCalls = append(f.WorktreeRemoveCalls, FakeWorktreeRemoveCall{Path: path, Force: force})
+	return f.WorktreeRemoveErr
+}
+
+func (f *FakeAdapter) WorktreeLock(_ context.Context, path, reason string) error {
+	f.WorktreeLockCalls = append(f.WorktreeLockCalls, FakeWorktreeLockCall{Path: path, Reason: reason})
+	return f.WorktreeLockErr
+}
+
+func (f *FakeAdapter) WorktreeUnlock(_ context.Context, path string) error {
+	f.WorktreeUnlockCalls = append(f.WorktreeUnlockCalls, FakeWorktreePathCall{Path: path})
+	return f.WorktreeUnlockErr
+}
+
+func (f *FakeAdapter) WorktreePrune(_ context.Context) error {
+	f.WorktreePruneCalls++
+	return f.WorktreePruneErr
 }

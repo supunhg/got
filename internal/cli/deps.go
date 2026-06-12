@@ -16,6 +16,7 @@ import (
 	"github.com/got-sh/got/internal/store"
 	"github.com/got-sh/got/internal/tui"
 	"github.com/got-sh/got/internal/version"
+	"github.com/got-sh/got/internal/worktreewiz"
 )
 
 // Deps bundles the runtime dependencies the CLI needs. Tests pass a
@@ -47,6 +48,11 @@ type Deps struct {
 	// blocks until the user quits. Tests stub this to skip the real
 	// Bubbletea program; production delegates to graphwiz.Run.
 	RunGraphWizard func(ctx context.Context, content string, theme tui.Theme) error
+	// RunWorktreeWizard starts the interactive worktree picker and
+	// blocks until the user picks a worktree and confirms, or
+	// cancels. Tests stub this to skip the real Bubbletea program;
+	// production delegates to worktreewiz.Run.
+	RunWorktreeWizard func(entries []worktreewiz.Entry, pre worktreewiz.PrePopulated, theme tui.Theme) (worktreewiz.Answers, error)
 	// DiscoverPlugins runs the plugin discovery pipeline (spec §11)
 	// and returns the list of valid plugins. Tests stub this to
 	// return canned results without scanning $PATH or .got/plugins/.
@@ -92,6 +98,9 @@ func defaultDeps() Deps {
 		},
 		RunGraphWizard: func(ctx context.Context, content string, theme tui.Theme) error {
 			return graphwiz.Run(ctx, content, theme)
+		},
+		RunWorktreeWizard: func(entries []worktreewiz.Entry, pre worktreewiz.PrePopulated, theme tui.Theme) (worktreewiz.Answers, error) {
+			return worktreewiz.Run(entries, pre, theme)
 		},
 		DiscoverPlugins: func(ctx context.Context) ([]plugin.DiscoveredPlugin, error) {
 			d := &plugin.Discoverer{

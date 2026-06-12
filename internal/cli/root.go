@@ -42,6 +42,9 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.RunGraphWizard != nil {
 		d.RunGraphWizard = deps.RunGraphWizard
 	}
+	if deps.RunWorktreeWizard != nil {
+		d.RunWorktreeWizard = deps.RunWorktreeWizard
+	}
 	if deps.DiscoverPlugins != nil {
 		d.DiscoverPlugins = deps.DiscoverPlugins
 	}
@@ -112,6 +115,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newRemoteCmd(d))
 	cmd.AddCommand(newGraphCmd(d))
 	cmd.AddCommand(newPluginCmd(d))
+	cmd.AddCommand(newWorktreeCmd(d))
 	cmd.AddCommand(newTUIStubCmd())
 
 	// Auto-register discovered plugins as `got <plugin-name>

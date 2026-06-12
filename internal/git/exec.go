@@ -820,3 +820,182 @@ func shortSHA(sha string) string {
 	}
 	return sha
 }
+
+// WorktreeList implements Adapter. Parses the output of
+// `git worktree list --porcelain`, which is a sequence of
+// blank-line-separated blocks like:
+//
+//	worktree /abs/path/to/wt
+//	HEAD abc1234...
+//	branch refs/heads/main
+//
+//	worktree /abs/path/to/other
+//	HEAD def5678...
+//	detached
+//
+// Locked and prunable blocks may carry `locked` and `prunable
+// gitdir file ...` markers.
+func (a *ExecAdapter) WorktreeList(ctx context.Context) ([]Worktree, error) {
+	stdout, _, err := a.run(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, gerr.GitError(err, "worktree", "list", "--porcelain")
+	}
+	return parseWorktreeList(string(stdout))
+}
+
+func parseWorktreeList(raw string) ([]Worktree, error) {
+	var out []Worktree
+	var cur *Worktree
+	flush := func() {
+		if cur != nil {
+			out = append(out, *cur)
+			cur = nil
+		}
+	}
+	for _, line := range strings.Split(raw, "\n") {
+		switch {
+		case line == "":
+			flush()
+		case strings.HasPrefix(line, "worktree "):
+			flush()
+			cur = &Worktree{Path: strings.TrimPrefix(line, "worktree ")}
+		case strings.HasPrefix(line, "HEAD "):
+			if cur != nil {
+				cur.HEAD = strings.TrimPrefix(line, "HEAD ")
+			}
+		case strings.HasPrefix(line, "branch "):
+			if cur != nil {
+				// "branch refs/heads/main" -> "main"
+				ref := strings.TrimPrefix(line, "branch ")
+				cur.Branch = strings.TrimPrefix(ref, "refs/heads/")
+			}
+		case line == "detached":
+			if cur != nil {
+				cur.Detached = true
+				cur.Branch = ""
+			}
+		case line == "locked":
+			if cur != nil {
+				cur.Locked = true
+			}
+		case strings.HasPrefix(line, "locked "):
+			// `locked true <reason>` (newer git). Older git
+			// emits just `locked` on its own line.
+			if cur != nil {
+				cur.Locked = true
+				rest := strings.TrimPrefix(line, "locked ")
+				// Strip a leading "true " if present.
+				rest = strings.TrimPrefix(rest, "true ")
+				cur.LockReason = rest
+			}
+		case strings.HasPrefix(line, "prunable "):
+			if cur != nil {
+				cur.Prunable = true
+			}
+		}
+	}
+	flush()
+	// The first entry is always the main worktree per git's
+	// contract, but we set IsMain explicitly so callers don't
+	// depend on positional indexing.
+	if len(out) > 0 {
+		out[0].IsMain = true
+	}
+	return out, nil
+}
+
+// WorktreeAdd implements Adapter. Maps WorktreeAddOpts onto
+// `git worktree add`'s flag set.
+func (a *ExecAdapter) WorktreeAdd(ctx context.Context, path string, opts WorktreeAddOpts) error {
+	if path == "" {
+		return gerr.Validation("worktree path is empty")
+	}
+	args := []string{"worktree", "add"}
+	if opts.Force {
+		args = append(args, "--force")
+	}
+	if opts.Detach {
+		args = append(args, "--detach")
+		args = append(args, path)
+		if opts.Commit != "" {
+			args = append(args, opts.Commit)
+		}
+	} else {
+		branch := opts.Branch
+		commit := opts.Commit
+		if branch == "" {
+			// git worktree add without -b checks out an
+			// existing branch; we need either branch or
+			// commit (or detach).
+			return gerr.Validation("worktree add requires --branch, --commit, or --detach")
+		}
+		// If we have a commit, we use the 3-arg form
+		// (`-b <new-branch> <path> <commit>`); otherwise we
+		// use the 2-arg form (`-b <branch> <path>`).
+		args = append(args, "-b", branch, path)
+		if commit != "" {
+			args = append(args, commit)
+		}
+	}
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// WorktreeRemove implements Adapter. Refuses to remove the main
+// worktree (caller can check Worktree.IsMain first).
+func (a *ExecAdapter) WorktreeRemove(ctx context.Context, path string, force bool) error {
+	if path == "" {
+		return gerr.Validation("worktree path is empty")
+	}
+	args := []string{"worktree", "remove"}
+	if force {
+		args = append(args, "--force")
+	}
+	args = append(args, path)
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// WorktreeLock implements Adapter.
+func (a *ExecAdapter) WorktreeLock(ctx context.Context, path, reason string) error {
+	if path == "" {
+		return gerr.Validation("worktree path is empty")
+	}
+	args := []string{"worktree", "lock"}
+	if reason != "" {
+		args = append(args, "--reason", reason)
+	}
+	args = append(args, path)
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// WorktreeUnlock implements Adapter.
+func (a *ExecAdapter) WorktreeUnlock(ctx context.Context, path string) error {
+	if path == "" {
+		return gerr.Validation("worktree path is empty")
+	}
+	_, _, err := a.run(ctx, "worktree", "unlock", path)
+	if err != nil {
+		return gerr.GitError(err, "worktree", "unlock", path)
+	}
+	return nil
+}
+
+// WorktreePrune implements Adapter.
+func (a *ExecAdapter) WorktreePrune(ctx context.Context) error {
+	_, _, err := a.run(ctx, "worktree", "prune")
+	if err != nil {
+		return gerr.GitError(err, "worktree", "prune")
+	}
+	return nil
+}

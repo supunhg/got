@@ -117,6 +117,47 @@ type PushOpts struct {
 	Tags           bool
 }
 
+// Worktree is a single entry from `git worktree list --porcelain`.
+// The Path is the absolute filesystem path of the worktree. Branch
+// is empty for the main worktree when HEAD is detached, and is the
+// short ref name (e.g. "main", "feature/x") for branch worktrees.
+// Locked is true when the worktree has been locked against pruning
+// (`git worktree lock`); LockReason is the human-readable reason
+// from `--reason`. Prunable is true when git thinks this worktree
+// is safe to prune (the administrative dir is gone but the worktree
+// itself is on disk).
+type Worktree struct {
+	Path       string `json:"path"`
+	HEAD       string `json:"head"`   // full SHA
+	Branch     string `json:"branch"` // short ref name, or "" if detached
+	IsMain     bool   `json:"isMain"` // true for the primary worktree
+	Detached   bool   `json:"detached"`
+	Locked     bool   `json:"locked"`
+	LockReason string `json:"lockReason,omitempty"`
+	Prunable   bool   `json:"prunable,omitempty"`
+}
+
+// WorktreeAddOpts controls `git worktree add` per spec §14. The
+// zero value matches `git worktree add -b <name> <path>`: create
+// a new branch named Branch at HEAD and check it out in the new
+// worktree.
+type WorktreeAddOpts struct {
+	// Branch is the branch to check out. If Commit is also set, a
+	// new branch with this name is created at Commit. If Branch is
+	// empty, the new worktree is detached (Detach must be true).
+	Branch string
+	// Commit is the commit/SHA to base the worktree on. Empty
+	// means HEAD.
+	Commit string
+	// Detach creates a detached HEAD worktree (no branch). When
+	// true, Branch and Commit are ignored.
+	Detach bool
+	// Force allows creating the worktree even if <path> already
+	// exists (as long as it is empty) or the branch is already
+	// checked out elsewhere.
+	Force bool
+}
+
 // GraphOpts filters the commit graph for `got graph`. The zero
 // value yields the spec §9 default (`-n 200`, no other filters).
 type GraphOpts struct {
@@ -202,4 +243,28 @@ type Adapter interface {
 	// edge is a directed edge. Decoration labels (branches, tags,
 	// HEAD) become node labels / attributes.
 	GraphDOT(ctx context.Context, opts GraphOpts) (string, error)
+	// WorktreeList returns the parsed result of `git worktree list
+	// --porcelain`. The Path field of each entry is the absolute
+	// filesystem path of the worktree.
+	WorktreeList(ctx context.Context) ([]Worktree, error)
+	// WorktreeAdd creates a new worktree at path. opts.Branch is the
+	// branch to check out (required unless opts.Detach is true);
+	// opts.Commit, if non-empty, is the commit/SHA to check out and
+	// also creates a new branch named opts.Branch; opts.Force
+	// allows creating on top of an existing directory.
+	WorktreeAdd(ctx context.Context, path string, opts WorktreeAddOpts) error
+	// WorktreeRemove removes the worktree at path. When force is
+	// true, the worktree is removed even if it has uncommitted
+	// changes (`git worktree remove --force`).
+	WorktreeRemove(ctx context.Context, path string, force bool) error
+	// WorktreeLock locks the worktree at path so it cannot be
+	// pruned or moved by housekeeping. reason is recorded in the
+	// lock metadata (may be empty).
+	WorktreeLock(ctx context.Context, path, reason string) error
+	// WorktreeUnlock removes the lock on the worktree at path.
+	WorktreeUnlock(ctx context.Context, path string) error
+	// WorktreePrune removes the worktree bookkeeping for any
+	// worktrees whose administrative files (.git/worktrees/<id>/)
+	// have been deleted manually (`git worktree prune`).
+	WorktreePrune(ctx context.Context) error
 }
