@@ -151,10 +151,13 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 // spec §16, the TUI commands install a discard logger so the
 // dashboard never writes to stderr.
 func Execute(logger *slog.Logger) error {
-	deps := defaultDeps()
-	if logger != nil {
-		deps.Logger = logger
-	}
+	// Thread the logger into the git adapter factory so spec §16
+	// "raw git invocations and exit codes" debug records are
+	// emitted by ExecAdapter.run. defaultDepsWithLogger stores
+	// the logger on Deps AND captures it in the AdapterFor
+	// closure; passing nil here is safe and equivalent to
+	// defaultDeps().
+	deps := defaultDepsWithLogger(logger)
 	err := NewRootCmd(deps).Execute()
 	return wrapExecuteError(err)
 }

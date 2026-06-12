@@ -92,12 +92,23 @@ type Deps struct {
 	Logger *slog.Logger
 }
 
-// defaultDeps returns the production Deps: a real ExecAdapter factory
-// and the real repo.Discover.
+// defaultDeps returns the production Deps with no logger attached.
+// The AdapterFor closure uses git.NewExecAdapter (no logger). Use
+// defaultDepsWithLogger when a *slog.Logger is available so the
+// adapter can emit spec §16 debug-level git invocations.
 func defaultDeps() Deps {
+	return defaultDepsWithLogger(nil)
+}
+
+// defaultDepsWithLogger is like defaultDeps but threads the logger
+// into the git adapter factory so ExecAdapter.run can emit
+// "git" / "git exit" debug records per spec §16. The Logger is
+// also stored on the Deps so subcommands can use it directly.
+func defaultDepsWithLogger(logger *slog.Logger) Deps {
 	return Deps{
+		Logger: logger,
 		AdapterFor: func(workTree string) git.Adapter {
-			return git.NewExecAdapter(workTree)
+			return git.NewExecAdapterWithLogger(workTree, logger)
 		},
 		Discover: repo.Discover,
 		StoreFor: store.Open,
@@ -135,3 +146,7 @@ func defaultDeps() Deps {
 		Stderr:     os.Stderr,
 	}
 }
+
+// defaultDepsLogger is split out so callers (e.g. tests) that don't
+// care about the logger can stay on defaultDeps() while production
+// (main.go via Execute) can use defaultDepsWithLogger.

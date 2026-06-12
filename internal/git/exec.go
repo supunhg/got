@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"strconv"
@@ -30,9 +31,14 @@ type ExecAdapter struct {
 	// Env holds additional environment variables to set when running
 	// `git`. The ambient process environment is preserved.
 	Env []string
+	// Logger is the *slog.Logger the adapter uses for spec §16
+	// debug-level "raw git invocations and exit codes" output.
+	// nil means "do not log". See NewExecAdapterWithLogger.
+	Logger *slog.Logger
 }
 
-// NewExecAdapter returns an ExecAdapter for the given work tree.
+// NewExecAdapter returns an ExecAdapter for the given work tree with
+// no logger attached. Equivalent to NewExecAdapterWithLogger(workTree, nil).
 func NewExecAdapter(workTree string) *ExecAdapter {
 	return &ExecAdapter{
 		GitPath:  "git",
@@ -40,10 +46,29 @@ func NewExecAdapter(workTree string) *ExecAdapter {
 	}
 }
 
+// NewExecAdapterWithLogger is like NewExecAdapter but attaches a
+// *slog.Logger so spec §16 debug-level records are emitted on every
+// `git` invocation. Pass nil to disable logging (the production
+// fallback when --log-level=error or higher).
+//
+// The logger is called with two debug records per invocation:
+//   - "git" with attribute `args` (the argv slice) before exec
+//   - "git exit" with `args`, `code` (the exit code; 0 for
+//     context-cancellation or pre-exec failure), and `err` (the
+//     error string, or empty on success) after exec
+func NewExecAdapterWithLogger(workTree string, logger *slog.Logger) *ExecAdapter {
+	a := NewExecAdapter(workTree)
+	a.Logger = logger
+	return a
+}
+
 // run executes `git args...` in the work tree, returning stdout, stderr,
 // and any error. It respects ctx cancellation by killing the entire
 // process group.
 func (a *ExecAdapter) run(ctx context.Context, args ...string) (stdout, stderr []byte, err error) {
+	if a.Logger != nil {
+		a.Logger.Debug("git", "args", args)
+	}
 	cmd := exec.CommandContext(ctx, a.GitPath, args...)
 	cmd.Dir = a.WorkTree
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -61,9 +86,37 @@ func (a *ExecAdapter) run(ctx context.Context, args ...string) (stdout, stderr [
 	// If the context was cancelled, surface that as the error so callers
 	// can distinguish cancellation from a real git failure.
 	if ctxErr := ctx.Err(); ctxErr != nil {
+		a.logExit(args, 0, ctxErr)
 		return stdoutBuf.Bytes(), stderrBuf.Bytes(), ctxErr
 	}
+	a.logExit(args, exitCode(err), err)
 	return stdoutBuf.Bytes(), stderrBuf.Bytes(), err
+}
+
+// logExit emits the spec §16 "git exit" debug record when a logger
+// is attached. It's a no-op when Logger is nil. The err string is
+// empty on success so log readers can filter on `err!=""`.
+func (a *ExecAdapter) logExit(args []string, code int, err error) {
+	if a.Logger == nil {
+		return
+	}
+	errStr := ""
+	if err != nil {
+		errStr = err.Error()
+	}
+	a.Logger.Debug("git exit", "args", args, "code", code, "err", errStr)
+}
+
+// exitCode extracts the integer exit code from an *exec.ExitError,
+// returning 0 for nil or for non-ExitError errors.
+func exitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if ee, ok := err.(*exec.ExitError); ok {
+		return ee.ExitCode()
+	}
+	return 0
 }
 
 // Status implements Adapter.
@@ -411,6 +464,9 @@ func (a *ExecAdapter) Commit(ctx context.Context, msg string, opts CommitOpts) (
 		args = append(args, "-m", msg)
 	}
 
+	if a.Logger != nil {
+		a.Logger.Debug("git", "args", args)
+	}
 	cmd := exec.CommandContext(ctx, a.GitPath, args...)
 	cmd.Dir = a.WorkTree
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
@@ -425,10 +481,13 @@ func (a *ExecAdapter) Commit(ctx context.Context, msg string, opts CommitOpts) (
 	cmd.Stderr = &stderrBuf
 	if err := cmd.Run(); err != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
+			a.logExit(args, 0, ctxErr)
 			return "", ctxErr
 		}
+		a.logExit(args, exitCode(err), err)
 		return "", gerr.GitError(err, args...)
 	}
+	a.logExit(args, 0, nil)
 	// Resolve the new SHA via `git rev-parse HEAD`. Slightly racy in
 	// the sense that the work tree could have changed in between,
 	// but for a CLI invocation this is the standard pattern.
