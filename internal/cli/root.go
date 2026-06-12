@@ -39,6 +39,9 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.RunBranchWizard != nil {
 		d.RunBranchWizard = deps.RunBranchWizard
 	}
+	if deps.RunGraphWizard != nil {
+		d.RunGraphWizard = deps.RunGraphWizard
+	}
 	if deps.IsTerminal != nil {
 		d.IsTerminal = deps.IsTerminal
 	}
@@ -104,6 +107,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newCommitCmd(d))
 	cmd.AddCommand(newBranchCmd(d))
 	cmd.AddCommand(newRemoteCmd(d))
+	cmd.AddCommand(newGraphCmd(d))
 	cmd.AddCommand(newTUIStubCmd())
 
 	return cmd

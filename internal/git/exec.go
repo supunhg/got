@@ -657,3 +657,166 @@ func (a *ExecAdapter) RemotePrune(ctx context.Context, name string) error {
 	}
 	return nil
 }
+
+// GraphASCII implements Adapter. Runs `git log --graph --decorate
+// --oneline` (and --all when opts.All is true) with the given
+// filters, and returns the raw output. The graph glyphs (|, \, /,
+// *, _, =) are part of the output verbatim; callers are expected
+// to wrap them in styles.
+func (a *ExecAdapter) GraphASCII(ctx context.Context, opts GraphOpts) (string, error) {
+	args := []string{"log", "--graph", "--decorate", "--oneline", "--no-color"}
+	if opts.All {
+		args = append(args, "--all")
+	}
+	if opts.MaxCount > 0 {
+		args = append(args, "-n", strconv.Itoa(opts.MaxCount))
+	} else if opts.MaxCount == 0 {
+		// Spec §9 default: 200 commits.
+		args = append(args, "-n", "200")
+	}
+	if opts.Since != "" {
+		args = append(args, "--since="+opts.Since)
+	}
+	if opts.Until != "" {
+		args = append(args, "--until="+opts.Until)
+	}
+	if opts.Author != "" {
+		args = append(args, "--author="+opts.Author)
+	}
+	if opts.Grep != "" {
+		args = append(args, "--grep="+opts.Grep)
+	}
+	stdout, _, err := a.run(ctx, args...)
+	if err != nil {
+		// git log returns non-zero with no error message when there
+		// are simply no commits; treat that as an empty graph, not
+		// a GitError.
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
+			return "", nil
+		}
+		return "", gerr.GitError(err, args...)
+	}
+	return strings.TrimRight(string(stdout), "\n"), nil
+}
+
+// GraphDOT implements Adapter. Walks `git log --pretty=%H %P %d`
+// filtered by opts and emits a Graphviz DOT digraph. Each commit
+// is a node labelled with its short SHA; parent edges are
+// directed; decorations (branches, tags, HEAD) are emitted as
+// record fields on the node label.
+func (a *ExecAdapter) GraphDOT(ctx context.Context, opts GraphOpts) (string, error) {
+	args := []string{"log", "--pretty=format:%H%x00%P%x00%D", "--no-color"}
+	if opts.All {
+		args = append(args, "--all")
+	}
+	if opts.MaxCount > 0 {
+		args = append(args, "-n", strconv.Itoa(opts.MaxCount))
+	} else if opts.MaxCount == 0 {
+		args = append(args, "-n", "200")
+	}
+	if opts.Since != "" {
+		args = append(args, "--since="+opts.Since)
+	}
+	if opts.Until != "" {
+		args = append(args, "--until="+opts.Until)
+	}
+	if opts.Author != "" {
+		args = append(args, "--author="+opts.Author)
+	}
+	if opts.Grep != "" {
+		args = append(args, "--grep="+opts.Grep)
+	}
+	stdout, _, err := a.run(ctx, args...)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 128 {
+			return renderEmptyDOT(), nil
+		}
+		return "", gerr.GitError(err, args...)
+	}
+	return renderDOT(string(stdout))
+}
+
+// renderEmptyDOT returns a placeholder DOT graph for an empty repo
+// (no commits, or no commits matching the filter).
+func renderEmptyDOT() string {
+	return "digraph got_commit_graph {\n" +
+		"  // no commits in this repository (or no commits match the filter)\n" +
+		"  empty [label=\"(no commits)\"];\n" +
+		"}\n"
+}
+
+// renderDOT parses the output of `git log --pretty=%H %P %d` and
+// builds a DOT digraph. Each input line is three NUL-separated
+// fields: full SHA, space-separated parent SHAs, comma-separated
+// decoration labels (e.g. "HEAD -> main, origin/main, tag: v1.0").
+func renderDOT(raw string) (string, error) {
+	var buf bytes.Buffer
+	buf.WriteString("digraph got_commit_graph {\n")
+	buf.WriteString("  node [shape=record, fontname=\"monospace\"];\n")
+	buf.WriteString("  rankdir=BT;\n")
+	sc := bufio.NewScanner(strings.NewReader(raw))
+	sc.Buffer(make([]byte, 64*1024), 1024*1024)
+	seen := make(map[string]bool)
+	for sc.Scan() {
+		line := sc.Text()
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, "\x00", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		sha := parts[0]
+		parents := strings.Fields(parts[1])
+		deco := ""
+		if len(parts) == 3 {
+			deco = parts[2]
+		}
+		if seen[sha] {
+			continue
+		}
+		seen[sha] = true
+		label := buildDOTNodeLabel(sha, deco)
+		fmt.Fprintf(&buf, "  %q [label=%s];\n", shortSHA(sha), label)
+		for _, p := range parents {
+			if p == "" {
+				continue
+			}
+			fmt.Fprintf(&buf, "  %q -> %q;\n", shortSHA(sha), shortSHA(p))
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return "", err
+	}
+	buf.WriteString("}\n")
+	return buf.String(), nil
+}
+
+// buildDOTNodeLabel returns a DOT label for a commit node. The
+// shape is `{ <short-sha> | <decorations> }` so Graphviz renders
+// the decorations in a second row.
+func buildDOTNodeLabel(sha, deco string) string {
+	short := shortSHA(sha)
+	if deco == "" {
+		return fmt.Sprintf("%q", short)
+	}
+	// Comma-separate the decoration parts into a single label cell.
+	cleaned := strings.TrimSpace(deco)
+	parts := strings.Split(cleaned, ", ")
+	for i, p := range parts {
+		parts[i] = strings.TrimSpace(p)
+	}
+	joined := strings.Join(parts, "\\n")
+	return fmt.Sprintf("{ %q | %q }", short, joined)
+}
+
+// shortSHA returns the first 7 hex characters of a full SHA. Git
+// itself uses 7 by default for short SHAs unless core.abbrev is
+// configured; we hard-code 7 because DOT consumers (Graphviz, etc.)
+// benefit from stable labels.
+func shortSHA(sha string) string {
+	if len(sha) >= 7 {
+		return sha[:7]
+	}
+	return sha
+}

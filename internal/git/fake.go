@@ -63,12 +63,11 @@ type FakeAdapter struct {
 	DeleteBranchErr   error
 	DeleteBranchCalls []FakeDeleteBranchCall
 
-	FetchPruneErr   error
-	FetchPruneCalls []FakeFetchCall
-	FetchAllErr     error
-	FetchAllCalls   int
-	FetchAllPrune   bool
-
+	FetchPruneErr     error
+	FetchPruneCalls   []FakeFetchCall
+	FetchAllErr       error
+	FetchAllCalls     int
+	FetchAllPrune     bool
 	RemoteAddErr      error
 	RemoteAddCalls    []FakeRemoteAddCall
 	RemoteRemoveErr   error
@@ -79,6 +78,13 @@ type FakeAdapter struct {
 	RemoteSetURLCalls []FakeRemoteSetURLCall
 	RemotePruneErr    error
 	RemotePruneCalls  []FakeFetchCall
+
+	GraphASCIIVal   string
+	GraphASCIIErr   error
+	GraphASCIICalls []FakeGraphCall
+	GraphDOTVal     string
+	GraphDOTCalls   []FakeGraphCall
+	GraphDOTErr     error
 }
 
 // FakeCommitCall records arguments to a Commit call.
@@ -158,6 +164,11 @@ type FakeRemoteSetURLCall struct {
 	Name    string
 	URL     string
 	PushURL bool
+}
+
+// FakeGraphCall records arguments to a GraphASCII / GraphDOT call.
+type FakeGraphCall struct {
+	Opts GraphOpts
 }
 
 // NewFake returns a FakeAdapter with safe defaults: an empty Status,
@@ -299,4 +310,16 @@ func (f *FakeAdapter) RemoteSetURL(_ context.Context, name, url string, pushURL 
 func (f *FakeAdapter) RemotePrune(_ context.Context, name string) error {
 	f.RemotePruneCalls = append(f.RemotePruneCalls, FakeFetchCall{Remote: name})
 	return f.RemotePruneErr
+}
+
+func (f *FakeAdapter) GraphASCII(_ context.Context, opts GraphOpts) (string, error) {
+	cp := opts
+	f.GraphASCIICalls = append(f.GraphASCIICalls, FakeGraphCall{Opts: cp})
+	return f.GraphASCIIVal, f.GraphASCIIErr
+}
+
+func (f *FakeAdapter) GraphDOT(_ context.Context, opts GraphOpts) (string, error) {
+	cp := opts
+	f.GraphDOTCalls = append(f.GraphDOTCalls, FakeGraphCall{Opts: cp})
+	return f.GraphDOTVal, f.GraphDOTErr
 }

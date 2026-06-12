@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"os"
 	"time"
@@ -8,6 +9,7 @@ import (
 	"github.com/got-sh/got/internal/branchwiz"
 	"github.com/got-sh/got/internal/commitwiz"
 	"github.com/got-sh/got/internal/git"
+	"github.com/got-sh/got/internal/graphwiz"
 	"github.com/got-sh/got/internal/initwiz"
 	"github.com/got-sh/got/internal/repo"
 	"github.com/got-sh/got/internal/store"
@@ -39,6 +41,10 @@ type Deps struct {
 	// until the user confirms or cancels. Tests stub this to return
 	// canned Answers without a real terminal.
 	RunBranchWizard func(branches []git.Branch, pre branchwiz.PrePopulated, theme tui.Theme) (branchwiz.Answers, error)
+	// RunGraphWizard starts the interactive commit-graph pager and
+	// blocks until the user quits. Tests stub this to skip the real
+	// Bubbletea program; production delegates to graphwiz.Run.
+	RunGraphWizard func(ctx context.Context, content string, theme tui.Theme) error
 	// IsTerminal reports whether stdout is a TTY. When false, the
 	// init command skips the wizard and uses defaults from flags.
 	IsTerminal func() bool
@@ -74,6 +80,9 @@ func defaultDeps() Deps {
 		},
 		RunBranchWizard: func(branches []git.Branch, pre branchwiz.PrePopulated, theme tui.Theme) (branchwiz.Answers, error) {
 			return branchwiz.Run(branches, pre, theme)
+		},
+		RunGraphWizard: func(ctx context.Context, content string, theme tui.Theme) error {
+			return graphwiz.Run(ctx, content, theme)
 		},
 		IsTerminal: defaultIsTerminal,
 		Now:        time.Now,

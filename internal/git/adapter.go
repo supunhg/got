@@ -117,6 +117,31 @@ type PushOpts struct {
 	Tags           bool
 }
 
+// GraphOpts filters the commit graph for `got graph`. The zero
+// value yields the spec §9 default (`-n 200`, no other filters).
+type GraphOpts struct {
+	// MaxCount caps the number of commits returned. Zero means
+	// use the spec default (200). Negative means unlimited.
+	MaxCount int
+	// Since is a date filter passed to `git log --since`. Empty
+	// means no filter.
+	Since string
+	// Until is a date filter passed to `git log --until`. Empty
+	// means no filter.
+	Until string
+	// Author is a pattern passed to `git log --author`. Empty
+	// means no filter.
+	Author string
+	// Grep is a pattern passed to `git log --grep`. Empty means
+	// no filter.
+	Grep string
+	// All, when true, includes all branches (refs/heads/* and
+	// refs/remotes/*). When false, follows the current HEAD's
+	// history only. Default in the CLI is true so the user sees
+	// every branch in the graph.
+	All bool
+}
+
 // Adapter is the abstract Git interface used by the rest of the GOT
 // codebase. The exec-based implementation in exec.go is the default; the
 // in-memory implementation in fake.go is used by tests.
@@ -166,4 +191,15 @@ type Adapter interface {
 	// FetchAll runs `git fetch --all` to update every configured
 	// remote in one call.
 	FetchAll(ctx context.Context, prune bool) error
+	// GraphASCII returns the raw output of `git log --graph
+	// --decorate --oneline --all` filtered by opts. The returned
+	// string is the pre-formatted graph (with the |, \, /, *, _,
+	// = graph glyphs in their normal ASCII form) and is suitable
+	// for terminal display after per-cell styling.
+	GraphASCII(ctx context.Context, opts GraphOpts) (string, error)
+	// GraphDOT returns a Graphviz DOT representation of the commit
+	// graph filtered by opts. Each commit is a node; each parent
+	// edge is a directed edge. Decoration labels (branches, tags,
+	// HEAD) become node labels / attributes.
+	GraphDOT(ctx context.Context, opts GraphOpts) (string, error)
 }
