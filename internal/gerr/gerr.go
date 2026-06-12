@@ -90,6 +90,34 @@ func GitError(cause error, args ...string) *Error {
 	}
 }
 
+// PermissionDenied returns a friendly error for the case when an
+// operation cannot proceed because the user lacks write permission
+// on a path (or another OS-level permission). The path is included
+// in the message and a hint points the user at the likely fix.
+func PermissionDenied(path string) *Error {
+	return &Error{
+		Code:    CodeGeneric,
+		Message: fmt.Sprintf("permission denied: cannot write to %q", path),
+		Hint:    "Check the file/directory owner and mode, or re-run with sufficient privileges.",
+	}
+}
+
+// PluginError returns a friendly error for plugin failures. The
+// plugin name is prefixed so log scrapes and bug reports are
+// unambiguous. The cause is preserved for errors.Is / errors.As and
+// the message is shown to the user.
+func PluginError(pluginName string, cause error, msg string) *Error {
+	prefix := pluginName
+	if prefix != "" {
+		prefix = "plugin " + pluginName + ": "
+	}
+	return &Error{
+		Code:    CodePlugin,
+		Message: prefix + msg,
+		Cause:   cause,
+	}
+}
+
 // Validation returns a user-input validation error.
 func Validation(msg string) *Error {
 	return &Error{Code: CodeValidation, Message: msg}

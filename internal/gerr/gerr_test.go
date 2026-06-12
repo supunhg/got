@@ -71,3 +71,59 @@ func TestConstructors(t *testing.T) {
 		t.Error("GitError: missing cause")
 	}
 }
+
+func TestPermissionDenied(t *testing.T) {
+	e := PermissionDenied("/var/got/plugins/foo")
+	if e.Code != CodeGeneric {
+		t.Errorf("Code = %d, want CodeGeneric (%d)", e.Code, CodeGeneric)
+	}
+	if !strings.Contains(e.Message, "/var/got/plugins/foo") {
+		t.Errorf("Message should include the path, got %q", e.Message)
+	}
+	if !strings.Contains(e.UserMessage(), "permission denied") {
+		t.Errorf("UserMessage should contain 'permission denied', got %q", e.UserMessage())
+	}
+	if e.Hint == "" {
+		t.Error("PermissionDenied should carry a hint")
+	}
+	// ExitCode maps it like any other *Error.
+	if got := ExitCode(e); got != int(CodeGeneric) {
+		t.Errorf("ExitCode = %d, want %d", got, CodeGeneric)
+	}
+}
+
+func TestPluginError(t *testing.T) {
+	cause := errors.New("exec: not found")
+	e := PluginError("github", cause, "manifest probe failed")
+	if e.Code != CodePlugin {
+		t.Errorf("Code = %d, want CodePlugin (%d)", e.Code, CodePlugin)
+	}
+	if !strings.Contains(e.Message, "plugin github") {
+		t.Errorf("Message should name the plugin, got %q", e.Message)
+	}
+	if !strings.Contains(e.Message, "manifest probe failed") {
+		t.Errorf("Message should include the user message, got %q", e.Message)
+	}
+	if !errors.Is(e, cause) {
+		t.Error("errors.Is should find the wrapped cause")
+	}
+	if got := ExitCode(e); got != int(CodePlugin) {
+		t.Errorf("ExitCode = %d, want %d (64)", got, CodePlugin)
+	}
+	if got := UserMessage(e); !strings.Contains(got, "plugin github") {
+		t.Errorf("UserMessage should be prefixed, got %q", got)
+	}
+}
+
+func TestPluginError_EmptyName(t *testing.T) {
+	// An empty plugin name is allowed (defensive: a future caller may
+	// not know the name); the constructor should still produce a
+	// usable error with the right code.
+	e := PluginError("", nil, "boom")
+	if e.Code != CodePlugin {
+		t.Errorf("Code = %d, want CodePlugin", e.Code)
+	}
+	if e.Message != "boom" {
+		t.Errorf("Message = %q, want %q (no plugin prefix)", e.Message, "boom")
+	}
+}
