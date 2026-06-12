@@ -61,10 +61,13 @@ If [path] is omitted, the current directory is used.`,
 			if len(args) == 1 {
 				opts.target = args[0]
 			}
-			// --no-tui is a global flag; read it from the
-			// persistent flags so callers can pass it before or
-			// after the subcommand.
-			if v, err := cmd.Flags().GetBool("no-tui"); err == nil {
+			// --no-tui is a global flag (persistent on the root).
+			// We read it via cmd.Root().PersistentFlags() so the
+			// lookup works regardless of where the flag is in the
+			// inheritance chain. If the flag is missing or unset,
+			// opts.noTUI stays at its zero value (false), which
+			// keeps the wizard path live.
+			if v, err := cmd.Root().PersistentFlags().GetBool("no-tui"); err == nil {
 				opts.noTUI = v
 			}
 			return runInit(cmd, d, opts)
