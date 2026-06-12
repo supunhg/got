@@ -55,6 +55,8 @@ func newRemoteListCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteList(cmd *cobra.Command, deps Deps, asJSON bool) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote list starting", "json", asJSON)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
@@ -62,8 +64,10 @@ func runRemoteList(cmd *cobra.Command, deps Deps, asJSON bool) error {
 	a := deps.AdapterFor(workTree)
 	remotes, err := a.Remotes(cmd.Context())
 	if err != nil {
+		logger.Warn("remote list failed", "err", err.Error())
 		return err
 	}
+	logger.Info("remote list finished", "count", len(remotes))
 	out := cmdWriter(cmd, deps)
 	if asJSON {
 		return writeJSON(out, remotes)
@@ -103,16 +107,22 @@ func newRemoteAddCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteAdd(cmd *cobra.Command, deps Deps, name, rawURL string, asJSON bool) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote add starting", "name", name, "url", rawURL)
 	if name == "" {
+		logger.Warn("remote add failed: empty name")
 		return gerr.Validation("remote name is empty")
 	}
 	if err := validateRemoteName(name); err != nil {
+		logger.Warn("remote add failed: invalid name", "name", name, "err", err.Error())
 		return err
 	}
 	if rawURL == "" {
+		logger.Warn("remote add failed: empty url", "name", name)
 		return gerr.Validation("remote URL is empty")
 	}
 	if err := validateRemoteURL(rawURL); err != nil {
+		logger.Warn("remote add failed: invalid url", "name", name, "url", rawURL, "err", err.Error())
 		return err
 	}
 	workTree, err := deps.Discover(".")
@@ -121,8 +131,10 @@ func runRemoteAdd(cmd *cobra.Command, deps Deps, name, rawURL string, asJSON boo
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.RemoteAdd(cmd.Context(), name, rawURL); err != nil {
+		logger.Warn("remote add failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("remote add finished", "name", name, "url", rawURL)
 	out := cmdWriter(cmd, deps)
 	if asJSON {
 		return writeJSON(out, git.Remote{Name: name, FetchURL: rawURL, PushURL: rawURL})
@@ -146,7 +158,10 @@ func newRemoteRemoveCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteRemove(cmd *cobra.Command, deps Deps, name string, force bool) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote remove starting", "name", name, "force", force)
 	if name == "" {
+		logger.Warn("remote remove failed: empty name")
 		return gerr.Validation("remote name is empty")
 	}
 	workTree, err := deps.Discover(".")
@@ -158,6 +173,7 @@ func runRemoteRemove(cmd *cobra.Command, deps Deps, name string, force bool) err
 		// Refuse if the remote has any tracking branch (spec §10).
 		remotes, rerr := a.Remotes(cmd.Context())
 		if rerr != nil {
+			logger.Warn("remote list failed", "err", rerr.Error())
 			return rerr
 		}
 		known := false
@@ -168,12 +184,15 @@ func runRemoteRemove(cmd *cobra.Command, deps Deps, name string, force bool) err
 			}
 		}
 		if !known {
+			logger.Warn("remote remove refused: not found", "name", name)
 			return gerr.Validation(fmt.Sprintf("remote %q does not exist", name))
 		}
 	}
 	if err := a.RemoteRemove(cmd.Context(), name, force); err != nil {
+		logger.Warn("remote remove failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("remote remove finished", "name", name, "force", force)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Removed remote %s\n", name)
 	return nil
 }
@@ -191,10 +210,14 @@ func newRemoteRenameCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteRename(cmd *cobra.Command, deps Deps, oldName, newName string) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote rename starting", "old", oldName, "new", newName)
 	if oldName == "" || newName == "" {
+		logger.Warn("remote rename failed: empty names", "old", oldName, "new", newName)
 		return gerr.Validation("remote rename requires both old and new names")
 	}
 	if err := validateRemoteName(newName); err != nil {
+		logger.Warn("remote rename failed: invalid new name", "old", oldName, "new", newName, "err", err.Error())
 		return err
 	}
 	workTree, err := deps.Discover(".")
@@ -203,8 +226,10 @@ func runRemoteRename(cmd *cobra.Command, deps Deps, oldName, newName string) err
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.RemoteRename(cmd.Context(), oldName, newName); err != nil {
+		logger.Warn("remote rename failed", "old", oldName, "new", newName, "err", err.Error())
 		return err
 	}
+	logger.Info("remote rename finished", "old", oldName, "new", newName)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Renamed remote %s -> %s\n", oldName, newName)
 	return nil
 }
@@ -225,10 +250,14 @@ func newRemoteSetURLCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteSetURL(cmd *cobra.Command, deps Deps, name, rawURL string, push, check bool) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote set-url starting", "name", name, "url", rawURL, "push", push, "check", check)
 	if name == "" || rawURL == "" {
+		logger.Warn("remote set-url failed: empty name or url", "name", name, "url", rawURL)
 		return gerr.Validation("remote set-url requires both name and URL")
 	}
 	if err := validateRemoteURL(rawURL); err != nil {
+		logger.Warn("remote set-url failed: invalid url", "name", name, "url", rawURL, "err", err.Error())
 		return err
 	}
 	workTree, err := deps.Discover(".")
@@ -237,6 +266,7 @@ func runRemoteSetURL(cmd *cobra.Command, deps Deps, name, rawURL string, push, c
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.RemoteSetURL(cmd.Context(), name, rawURL, push); err != nil {
+		logger.Warn("remote set-url failed", "name", name, "url", rawURL, "err", err.Error())
 		return err
 	}
 	if check {
@@ -244,9 +274,11 @@ func runRemoteSetURL(cmd *cobra.Command, deps Deps, name, rawURL string, push, c
 		// don't keep a long-lived fetch running, but reuse the adapter
 		// so a fake can record the call.
 		if err := a.Fetch(context.Background(), name); err != nil {
+			logger.Warn("remote set-url check fetch failed", "name", name, "err", err.Error())
 			return err
 		}
 	}
+	logger.Info("remote set-url finished", "name", name, "url", rawURL, "push", push, "check", check)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Updated %s URL for %s -> %s\n", urlKind(push), name, rawURL)
 	return nil
 }
@@ -405,7 +437,10 @@ func newRemotePruneCmd(deps Deps) *cobra.Command {
 }
 
 func runRemotePrune(cmd *cobra.Command, deps Deps, name string) error {
+	logger := remoteLogger(deps)
+	logger.Info("remote prune starting", "name", name)
 	if name == "" {
+		logger.Warn("remote prune failed: empty name")
 		return gerr.Validation("prune requires a remote name")
 	}
 	workTree, err := deps.Discover(".")
@@ -414,8 +449,10 @@ func runRemotePrune(cmd *cobra.Command, deps Deps, name string) error {
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.RemotePrune(cmd.Context(), name); err != nil {
+		logger.Warn("remote prune failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("remote prune finished", "name", name)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Pruned %s\n", name)
 	return nil
 }
