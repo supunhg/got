@@ -3,9 +3,7 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -17,17 +15,6 @@ import (
 	"github.com/got-sh/got/internal/store"
 	"github.com/got-sh/got/internal/tui"
 )
-
-// runGit runs `git args...` in dir and fails the test on error.
-func runGit(t *testing.T, dir string, args ...string) {
-	t.Helper()
-	c := exec.Command("git", args...)
-	c.Dir = dir
-	out, err := c.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-	}
-}
 
 // initDepsFor builds a Deps value pointed at the given stdout/stderr
 // with deterministic time/user/version. The wizard is stubbed to
@@ -386,16 +373,7 @@ func TestInitCmd_ForcePreservesDBContent(t *testing.T) {
 	}
 }
 
-// initGitRepo creates a fresh git repo in a tempdir and returns the dir.
-func initGitRepo(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	runGit(t, dir, "init", "-b", "main")
-	runGit(t, dir, "config", "user.email", "test@example.com")
-	runGit(t, dir, "config", "user.name", "Test User")
-	runGit(t, dir, "config", "commit.gpgsign", "false")
-	return dir
-}
+// initGitRepo lives in testhelpers_test.go (shared with status_test.go).
 
 // readMeta opens a Store and returns one meta value, then closes it.
 func readMeta(dbPath, key string) (string, error) {
