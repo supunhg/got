@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/got-sh/got/internal/git"
 )
@@ -70,4 +73,32 @@ func initStatusRepoWithCommit(t *testing.T) string {
 	runGit(t, dir, "add", "README.md")
 	runGit(t, dir, "commit", "-m", "initial commit")
 	return dir
+}
+
+// depsWithLogger builds a Deps with a buffer-backed *slog.Logger
+// (slog text handler, LevelInfo) writing to logBuf, plus the same
+// safe defaults used by pluginDepsFor / remoteLogDepsFor /
+// cmdLogDepsFor / execLogDepsFor / remoteLog2DepsFor across the
+// spec-§16 log tests. The single shared helper replaces the five
+// near-identical copies that accumulated as the started/finished
+// info + warn-on-failure pattern spread across plugin, remote,
+// status, commit, branch, graph, worktree, and tui subcommand
+// tests.
+//
+// Tests that need a different level or a different format can
+// post-mutate the returned Deps.Logger; tests that need no logger
+// at all should use pluginDepsFor (no Logger field set) or build
+// a Deps literal directly.
+func depsWithLogger(logBuf, stdout, stderr *bytes.Buffer, a git.Adapter, workTree string) Deps {
+	return Deps{
+		AdapterFor: func(string) git.Adapter { return a },
+		Discover:   func(string) (string, error) { return workTree, nil },
+		IsTerminal: func() bool { return false },
+		Now:        func() time.Time { return time.Unix(1_700_000_000, 0).UTC() },
+		User:       func() string { return "alice" },
+		GotVersion: "0.1.0-test",
+		Stdout:     stdout,
+		Stderr:     stderr,
+		Logger:     slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})),
+	}
 }

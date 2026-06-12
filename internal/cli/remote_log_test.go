@@ -4,28 +4,17 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/got-sh/got/internal/git"
 )
 
-// remoteLogDepsFor builds a Deps with a slog Logger that writes to
-// logBuf at LevelInfo. The adapter is supplied by the caller.
+// remoteLogDepsFor is a thin alias for the shared depsWithLogger
+// helper. Kept as a named call site so the remote log tests read
+// consistently with the other log test files.
 func remoteLogDepsFor(logBuf, stdout, stderr *bytes.Buffer, a git.Adapter, workTree string) Deps {
-	return Deps{
-		AdapterFor: func(string) git.Adapter { return a },
-		Discover:   func(string) (string, error) { return workTree, nil },
-		IsTerminal: func() bool { return false },
-		Now:        func() time.Time { return time.Unix(1_700_000_000, 0).UTC() },
-		User:       func() string { return "alice" },
-		GotVersion: "0.1.0-test",
-		Stdout:     stdout,
-		Stderr:     stderr,
-		Logger:     slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})),
-	}
+	return depsWithLogger(logBuf, stdout, stderr, a, workTree)
 }
 
 func TestRemoteCmd_Fetch_EmitsStartedFinishedLogs(t *testing.T) {

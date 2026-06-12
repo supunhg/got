@@ -3,10 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
-	"log/slog"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/git"
@@ -14,23 +12,17 @@ import (
 )
 
 // pluginLoggerDepsFor builds a Deps with a slog Logger that writes
-// to the provided buffer at LevelInfo. Mirrors pluginDepsFor but
-// exposes the buffer for assertion.
+// to the provided buffer at LevelInfo. The shared depsWithLogger
+// helper from testhelpers_test.go provides the adapter / discover
+// / IsTerminal / Now / User / GotVersion / stdout / stderr
+// scaffolding; pluginLoggerDepsFor layers DiscoverPlugins on top
+// so the plugin subcommand tree has something to enumerate.
 func pluginLoggerDepsFor(logBuf, stdout, stderr *bytes.Buffer, a git.Adapter, workTree string, plugins []plugin.DiscoveredPlugin) Deps {
-	return Deps{
-		AdapterFor: func(string) git.Adapter { return a },
-		Discover:   func(string) (string, error) { return workTree, nil },
-		IsTerminal: func() bool { return false },
-		Now:        func() time.Time { return time.Unix(1_700_000_000, 0).UTC() },
-		User:       func() string { return "alice" },
-		GotVersion: "0.1.0-test",
-		Stdout:     stdout,
-		Stderr:     stderr,
-		Logger:     slog.New(slog.NewTextHandler(logBuf, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		DiscoverPlugins: func(_ context.Context) ([]plugin.DiscoveredPlugin, error) {
-			return plugins, nil
-		},
+	d := depsWithLogger(logBuf, stdout, stderr, a, workTree)
+	d.DiscoverPlugins = func(_ context.Context) ([]plugin.DiscoveredPlugin, error) {
+		return plugins, nil
 	}
+	return d
 }
 
 func TestPluginCmd_Install_EmitsStartedFinishedLogs(t *testing.T) {
