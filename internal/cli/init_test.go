@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,7 +41,6 @@ func initDepsFor(stdout, stderr *bytes.Buffer, version, user string, at time.Tim
 		Discover: repo.Discover,
 		StoreFor: store.Open,
 		RunWizard: func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
-			// Honor pre-populated values; fall back to canned.
 			out := answers
 			if pre.Name != "" {
 				out.Name = pre.Name
@@ -81,7 +79,16 @@ func TestInitCmd_FreshRepo_Wizard(t *testing.T) {
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
+	canned := cannedAnswers()
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), canned)
+	// Override RunWizard with a counting version so the test asserts
+	// the wizard code path was actually exercised, not just that
+	// the file ends up with the right values.
+	var wizardCalls int
+	deps.RunWizard = func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
+		wizardCalls++
+		return canned, nil
+	}
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
@@ -91,8 +98,18 @@ func TestInitCmd_FreshRepo_Wizard(t *testing.T) {
 		t.Fatalf("init: %v\nstderr=%s", err, stderr.String())
 	}
 
-	// Wizard produced name "wizname" + branch "wizbranch" — verify
-	// got.yml reflects them, not the detected defaults.
+	// Diagnostic: dump cwd + the file we just wrote so a failure
+	// has enough context to debug.
+	cwd, _ := os.Getwd()
+	t.Logf("cwd = %q, wizardCalls = %d", cwd, wizardCalls)
+	if body, err := os.ReadFile(filepath.Join(dir, "got.yml")); err == nil {
+		t.Logf("got.yml contents:\n%s", body)
+	}
+
+	if wizardCalls != 1 {
+		t.Errorf("RunWizard was called %d times, want 1 (wizard should fire when stdout is a TTY and --no-tui is not set)", wizardCalls)
+	}
+
 	cfg, err := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
 	if err != nil {
 		t.Fatalf("ReadProjectConfig: %v", err)
@@ -105,13 +122,49 @@ func TestInitCmd_FreshRepo_Wizard(t *testing.T) {
 	}
 }
 
+// TestRunInit_DirectWizardPath calls runInit directly, bypassing
+// Cobra's flag plumbing. If THIS test passes but
+// TestInitCmd_FreshRepo_Wizard fails, the bug is in how the
+// subcommand wires the --no-tui flag. If both fail, the bug is in
+// resolveAnswers or applyInit.
+func TestRunInit_DirectWizardPath(t *testing.T) {
+	dir := initGitRepo(t)
+	withChdir(t, dir)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	canned := cannedAnswers()
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), canned)
+	var wizardCalls int
+	deps.RunWizard = func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
+		wizardCalls++
+		return canned, nil
+	}
+
+	opts := &initOptions{} // no flags
+	if err := runInit(nil, deps, opts); err != nil {
+		t.Fatalf("runInit: %v\nstderr=%s", err, stderr.String())
+	}
+	if wizardCalls != 1 {
+		t.Errorf("wizardCalls = %d, want 1 (direct runInit should pick the wizard path)", wizardCalls)
+	}
+	cfg, err := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
+	if err != nil {
+		t.Fatalf("ReadProjectConfig: %v", err)
+	}
+	if cfg.Project.Name != "wizname" {
+		t.Errorf("Name = %q, want wizname", cfg.Project.Name)
+	}
+	if cfg.Project.DefaultBranch != "wizbranch" {
+		t.Errorf("DefaultBranch = %q, want wizbranch", cfg.Project.DefaultBranch)
+	}
+}
+
 func TestInitCmd_FreshRepo_NonInteractive(t *testing.T) {
 	dir := initGitRepo(t)
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
-	// Simulate --no-tui by setting IsTerminal=false.
 	deps.IsTerminal = func() bool { return false }
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
@@ -121,8 +174,6 @@ func TestInitCmd_FreshRepo_NonInteractive(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("init --no-tui: %v", err)
 	}
-	// Non-interactive: name = dir basename, branch = main (detected
-	// branch in a fresh init -b main repo).
 	cfg, err := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
 	if err != nil {
 		t.Fatalf("ReadProjectConfig: %v", err)
@@ -141,7 +192,6 @@ func TestInitCmd_FreshRepo_FlagsOverrideWizard(t *testing.T) {
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	// --name should override the wizard's "wizname" answer.
 	cmd.SetArgs([]string{"init", "--name", "cliwin"})
 
 	if err := cmd.Execute(); err != nil {
@@ -182,7 +232,6 @@ func TestInitCmd_RefusesIdempotent(t *testing.T) {
 		t.Errorf("exit code = %d, want 5; err=%v", got, err)
 	}
 
-	// --force should succeed and bump init_at.
 	stdout.Reset()
 	stderr.Reset()
 	deps.Now = func() time.Time { return time.Unix(1_800_000_000, 0).UTC() }
@@ -209,7 +258,7 @@ func TestInitCmd_FlagsOverrideDefaults(t *testing.T) {
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
 	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
-	deps.IsTerminal = func() bool { return false } // non-interactive
+	deps.IsTerminal = func() bool { return false }
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
@@ -240,7 +289,7 @@ func TestInitCmd_FlagsOverrideDefaults(t *testing.T) {
 }
 
 func TestInitCmd_OutsideGitRepoFails(t *testing.T) {
-	dir := t.TempDir() // No git init.
+	dir := t.TempDir()
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
@@ -337,8 +386,7 @@ func TestInitCmd_ForcePreservesDBContent(t *testing.T) {
 	}
 }
 
-// initGitRepo creates a fresh git repo in a tempdir and returns the
-// dir.
+// initGitRepo creates a fresh git repo in a tempdir and returns the dir.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -361,7 +409,3 @@ func readMeta(dbPath, key string) (string, error) {
 
 // Compile-time guard: gerr.Error implements the error interface.
 var _ error = (*gerr.Error)(nil)
-
-// Compile-time guard: errors is used somewhere; keep it from
-// being dropped by goimports.
-var _ = errors.New

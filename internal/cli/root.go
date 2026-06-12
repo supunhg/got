@@ -30,6 +30,12 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.StoreFor != nil {
 		d.StoreFor = deps.StoreFor
 	}
+	if deps.RunWizard != nil {
+		d.RunWizard = deps.RunWizard
+	}
+	if deps.IsTerminal != nil {
+		d.IsTerminal = deps.IsTerminal
+	}
 	if deps.Now != nil {
 		d.Now = deps.Now
 	}
