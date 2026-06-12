@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/got-sh/got/internal/branchwiz"
 	"github.com/got-sh/got/internal/commitwiz"
 	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/initwiz"
@@ -34,6 +35,10 @@ type Deps struct {
 	// until the user confirms or cancels. Tests stub this to return
 	// canned Answers without a real terminal.
 	RunCommitWizard func(staged []string, pre commitwiz.PrePopulated) (commitwiz.Answers, error)
+	// RunBranchWizard starts the interactive branch wizard and blocks
+	// until the user confirms or cancels. Tests stub this to return
+	// canned Answers without a real terminal.
+	RunBranchWizard func(branches []git.Branch, pre branchwiz.PrePopulated, theme tui.Theme) (branchwiz.Answers, error)
 	// IsTerminal reports whether stdout is a TTY. When false, the
 	// init command skips the wizard and uses defaults from flags.
 	IsTerminal func() bool
@@ -66,6 +71,9 @@ func defaultDeps() Deps {
 		},
 		RunCommitWizard: func(staged []string, pre commitwiz.PrePopulated) (commitwiz.Answers, error) {
 			return commitwiz.Run(staged, pre, commitwiz.NewHeuristicSuggester(), tui.NewTheme())
+		},
+		RunBranchWizard: func(branches []git.Branch, pre branchwiz.PrePopulated, theme tui.Theme) (branchwiz.Answers, error) {
+			return branchwiz.Run(branches, pre, theme)
 		},
 		IsTerminal: defaultIsTerminal,
 		Now:        time.Now,

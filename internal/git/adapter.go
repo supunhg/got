@@ -139,4 +139,12 @@ type Adapter interface {
 	Unstage(ctx context.Context, paths []string) error
 	// StageAllTracked stages modifications to all tracked files (`git add -u`).
 	StageAllTracked(ctx context.Context) error
+	// CreateBranch creates a new branch at startPoint (or HEAD if
+	// startPoint is empty). It does NOT check the branch out; for
+	// that, call Checkout.
+	CreateBranch(ctx context.Context, name, startPoint string) error
+	// DeleteBranch deletes the named branch. When force is true,
+	// the branch is deleted even if it has unmerged work
+	// (`git branch -D`); otherwise `git branch -d` is used.
+	DeleteBranch(ctx context.Context, name string, force bool) error
 }

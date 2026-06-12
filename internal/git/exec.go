@@ -439,8 +439,70 @@ func (a *ExecAdapter) Commit(ctx context.Context, msg string, opts CommitOpts) (
 	return SHA(strings.TrimSpace(string(shaOut))), nil
 }
 
-func (a *ExecAdapter) Checkout(_ context.Context, _ string, _ CheckoutOpts) error {
-	return gerr.Validation("`got checkout` is not yet implemented in v0.1")
+// Checkout implements Adapter. `git checkout` switches the working
+// tree to the given ref. Create=true maps to `git checkout -b`
+// (create the branch and switch to it in one step). Detach=true
+// maps to `--detach` (used for one-off inspections of a SHA).
+func (a *ExecAdapter) Checkout(ctx context.Context, ref string, opts CheckoutOpts) error {
+	if ref == "" {
+		return gerr.Validation("checkout ref is empty")
+	}
+	args := []string{"checkout"}
+	if opts.Create {
+		args = append(args, "-b")
+	}
+	if opts.Force {
+		args = append(args, "--force")
+	}
+	if opts.Detach {
+		args = append(args, "--detach")
+	}
+	args = append(args, ref)
+	_, stderr, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	_ = stderr
+	return nil
+}
+
+// CreateBranch implements Adapter.
+func (a *ExecAdapter) CreateBranch(ctx context.Context, name, startPoint string) error {
+	if name == "" {
+		return gerr.Validation("branch name is empty")
+	}
+	if strings.ContainsAny(name, " \t\n~^:?*[\\") {
+		return gerr.Validation(fmt.Sprintf("invalid branch name %q (contains forbidden characters)", name))
+	}
+	args := []string{"branch", name}
+	if startPoint != "" {
+		args = append(args, startPoint)
+	}
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// DeleteBranch implements Adapter.
+func (a *ExecAdapter) DeleteBranch(ctx context.Context, name string, force bool) error {
+	if name == "" {
+		return gerr.Validation("branch name is empty")
+	}
+	flag := "-d"
+	if force {
+		flag = "-D"
+	}
+	_, stderr, err := a.run(ctx, "branch", flag, name)
+	if err != nil {
+		// git branch -d exits with 1 and a helpful stderr message
+		// when the branch is not fully merged; surface that as a
+		// GitError so callers can match on it.
+		return gerr.GitError(err, "branch", flag, name)
+	}
+	_ = stderr
+	return nil
 }
 
 func (a *ExecAdapter) Merge(_ context.Context, _ string, _ MergeOpts) error {

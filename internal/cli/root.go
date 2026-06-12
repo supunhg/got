@@ -36,6 +36,9 @@ func NewRootCmd(deps Deps) *cobra.Command {
 	if deps.RunCommitWizard != nil {
 		d.RunCommitWizard = deps.RunCommitWizard
 	}
+	if deps.RunBranchWizard != nil {
+		d.RunBranchWizard = deps.RunBranchWizard
+	}
 	if deps.IsTerminal != nil {
 		d.IsTerminal = deps.IsTerminal
 	}

@@ -57,6 +57,11 @@ type FakeAdapter struct {
 	UnstageCalls         [][]string
 	StageAllTrackedErr   error
 	StageAllTrackedCalls int
+
+	CreateBranchErr   error
+	CreateBranchCalls []FakeCreateBranchCall
+	DeleteBranchErr   error
+	DeleteBranchCalls []FakeDeleteBranchCall
 }
 
 // FakeCommitCall records arguments to a Commit call.
@@ -99,6 +104,18 @@ type FakePushCall struct {
 	Remote string
 	Branch string
 	Opts   PushOpts
+}
+
+// FakeCreateBranchCall records arguments to a CreateBranch call.
+type FakeCreateBranchCall struct {
+	Name       string
+	StartPoint string
+}
+
+// FakeDeleteBranchCall records arguments to a DeleteBranch call.
+type FakeDeleteBranchCall struct {
+	Name  string
+	Force bool
 }
 
 // NewFake returns a FakeAdapter with safe defaults: an empty Status,
@@ -194,4 +211,14 @@ func (f *FakeAdapter) Unstage(_ context.Context, paths []string) error {
 func (f *FakeAdapter) StageAllTracked(_ context.Context) error {
 	f.StageAllTrackedCalls++
 	return f.StageAllTrackedErr
+}
+
+func (f *FakeAdapter) CreateBranch(_ context.Context, name, startPoint string) error {
+	f.CreateBranchCalls = append(f.CreateBranchCalls, FakeCreateBranchCall{Name: name, StartPoint: startPoint})
+	return f.CreateBranchErr
+}
+
+func (f *FakeAdapter) DeleteBranch(_ context.Context, name string, force bool) error {
+	f.DeleteBranchCalls = append(f.DeleteBranchCalls, FakeDeleteBranchCall{Name: name, Force: force})
+	return f.DeleteBranchErr
 }
