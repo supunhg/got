@@ -15,9 +15,12 @@ import (
 
 // newPluginCmd builds the `got plugin` subcommand tree per spec §11.
 //
-//	got plugin list           list discovered plugins (table or --json)
-//	got plugin info <name>    show a plugin's full manifest
-//	got plugin install <src>  install from local path or git URL [v0.1: stubbed]
+//	got plugin list [--json] [--all|--enabled|--disabled]   list discovered plugins
+//	got plugin info <name> [--json]                        show a plugin's full manifest
+//	got plugin install <src>  [--force]                    install from local path or git URL
+//	got plugin enable <name>                                add to got.yml plugins.enabled
+//	got plugin disable <name>                               remove from got.yml plugins.enabled
+//	got plugin search <query>                               [v0.2+] registry search; stubbed
 //
 // In addition, any plugins found via discovery are registered as
 // `got <plugin-name> <command>` subcommands under root. v0.1 ships
@@ -27,7 +30,7 @@ func newPluginCmd(d Deps) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plugin",
 		Short: "Manage GOT plugins",
-		Long: `Discover, inspect, and (eventually) install external GOT plugins.
+		Long: `Discover, inspect, install, and enable/disable external GOT plugins.
 
 A plugin is an executable named got-<name> on $PATH or in
 .got/plugins/. When GOT starts, each candidate is invoked with
@@ -36,51 +39,130 @@ parsed and validated. Commands declared in the manifest are
 registered as ` + "`got <plugin-name> <command>`" + ` subcommands.
 
 v0.1 ships zero plugins. The interface, discovery, and manifest
-protocol are fully implemented so plugin authors can start building
-immediately; live invocation lands in v0.5.`,
+protocol are fully implemented; install + enable/disable + per-repo
+registry are implemented in this build; live invocation lands in v0.5.`,
 	}
 	cmd.AddCommand(newPluginListCmd(d))
 	cmd.AddCommand(newPluginInfoCmd(d))
-	cmd.AddCommand(newPluginInstallCmd())
+	cmd.AddCommand(newPluginInstallCmd(d))
+	cmd.AddCommand(newPluginEnableCmd(d))
+	cmd.AddCommand(newPluginDisableCmd(d))
+	cmd.AddCommand(newPluginSearchCmd())
 	return cmd
 }
 
-// newPluginListCmd builds `got plugin list [--json]`.
+// newPluginListCmd builds `got plugin list [--json] [--all|--enabled|--disabled]`.
 func newPluginListCmd(d Deps) *cobra.Command {
-	var asJSON bool
+	var (
+		asJSON  bool
+		showAll bool
+		showEna bool
+		showDis bool
+	)
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List discovered plugins",
-		Args:  cobra.NoArgs,
+		Long: `List discovered plugins.
+
+By default only enabled plugins are shown. Pass --all to also show
+plugins that are installed but not enabled, --enabled to force
+enabled-only, or --disabled to show only disabled. The ENABLED
+column reflects got.yml's plugins.enabled list.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return runPluginList(cmd.Context(), cmd, d, asJSON)
+			return runPluginList(cmd.Context(), cmd, d, asJSON, parseListFilter(showAll, showEna, showDis))
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "machine-readable JSON output")
+	cmd.Flags().BoolVar(&showAll, "all", false, "show enabled and disabled plugins")
+	cmd.Flags().BoolVar(&showEna, "enabled", false, "show only enabled plugins")
+	cmd.Flags().BoolVar(&showDis, "disabled", false, "show only disabled plugins")
+	cmd.MarkFlagsMutuallyExclusive("all", "enabled", "disabled")
 	return cmd
 }
 
-func runPluginList(ctx context.Context, cmd *cobra.Command, d Deps, asJSON bool) error {
+// listFilter encodes the --all/--enabled/--disabled selection. The
+// default (all false) is "enabled only" — the conservative view that
+// matches what the rest of GOT (and the dashboard's Plugins tab) sees
+// at startup.
+type listFilter int
+
+const (
+	filterEnabled listFilter = iota
+	filterAll
+	filterDisabled
+)
+
+// parseListFilter resolves the mutually-exclusive --all/--enabled/--disabled
+// flags into a listFilter. The default is "enabled only" — the conservative
+// view that matches what the rest of GOT (and the dashboard's Plugins tab)
+// sees at startup. The flags are marked mutually exclusive by
+// MarkFlagsMutuallyExclusive in the command definition.
+func parseListFilter(showAll, showEna, showDis bool) listFilter {
+	switch {
+	case showAll:
+		return filterAll
+	case showDis:
+		return filterDisabled
+	case showEna:
+		return filterEnabled
+	default:
+		return filterEnabled
+	}
+}
+
+func runPluginList(ctx context.Context, cmd *cobra.Command, d Deps, asJSON bool, filter listFilter) error {
 	plugins, err := d.DiscoverPlugins(ctx)
 	if err != nil {
 		return err
 	}
+	enabled, err := loadEnabledSet()
+	if err != nil {
+		return err
+	}
+	view := filterPlugins(plugins, enabled, filter)
 	out := cmdWriter(cmd, d)
 	if asJSON {
-		return writeJSON(out, plugins)
+		return writeJSON(out, view)
 	}
-	return writePluginTable(out, plugins)
+	return writePluginTable(out, view, enabled)
 }
 
-func writePluginTable(w io.Writer, plugins []plugin.DiscoveredPlugin) error {
+// filterPlugins applies the list filter to the discovered list,
+// decorating each entry with its enabled status.
+func filterPlugins(in []plugin.DiscoveredPlugin, enabled map[string]bool, f listFilter) []plugin.DiscoveredPlugin {
+	out := make([]plugin.DiscoveredPlugin, 0, len(in))
+	for _, p := range in {
+		isOn := enabled[p.Name]
+		switch f {
+		case filterAll:
+			out = append(out, p)
+		case filterEnabled:
+			if isOn {
+				out = append(out, p)
+			}
+		case filterDisabled:
+			if !isOn {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
+}
+
+func writePluginTable(w io.Writer, plugins []plugin.DiscoveredPlugin, enabled map[string]bool) error {
 	if len(plugins) == 0 {
 		_, err := fmt.Fprintln(w, "(no plugins discovered)")
 		return err
 	}
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "NAME\tVERSION\tMIN GOT\tSOURCE\tPATH")
+	_, _ = fmt.Fprintln(tw, "NAME\tVERSION\tMIN GOT\tSOURCE\tPATH\tENABLED")
 	for _, p := range plugins {
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.Name, p.Version, p.MinGOT, p.Source, p.Path)
+		marker := "no"
+		if enabled[p.Name] {
+			marker = "yes"
+		}
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n", p.Name, p.Version, p.MinGOT, p.Source, p.Path, marker)
 	}
 	return tw.Flush()
 }
@@ -134,17 +216,140 @@ func writePluginInfo(w io.Writer, p plugin.DiscoveredPlugin) error {
 	return nil
 }
 
-// newPluginInstallCmd is a stub for `got plugin install`. Per spec
-// §11 the real installer lands in v0.5; v0.1 only returns a
-// "not yet implemented" error so the subcommand tree stays
-// discoverable.
-func newPluginInstallCmd() *cobra.Command {
-	return &cobra.Command{
+// newPluginInstallCmd builds `got plugin install <source> [--force]`.
+// The source is either a local file path to a plugin binary or a
+// git URL (http(s)://, git://, ssh://, or user@host:path).
+func newPluginInstallCmd(d Deps) *cobra.Command {
+	var force bool
+	cmd := &cobra.Command{
 		Use:   "install <source>",
-		Short: "Install a plugin (not yet implemented in v0.1)",
+		Short: "Install a plugin from a local path or git URL",
+		Long: `Install a plugin into the current repo's .got/plugins/ directory.
+
+The source is either a local path to a plugin binary or a git URL
+(http(s)://, git://, ssh://, or user@host:path). The destination
+filename is derived from the source's manifest: got-<name>. Pass
+--force to overwrite an existing binary at the destination.`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginInstall(cmd.Context(), cmd, d, args[0], force)
+		},
+	}
+	cmd.Flags().BoolVar(&force, "force", false, "overwrite an existing binary at the destination")
+	return cmd
+}
+
+func runPluginInstall(_ context.Context, cmd *cobra.Command, d Deps, source string, force bool) error {
+	workTree, err := d.Discover(".")
+	if err != nil {
+		return err
+	}
+	inst := plugin.NewInstaller(workTree)
+	inst.Overwrite = force
+	res, err := installFromSource(inst, source)
+	if err != nil {
+		return err
+	}
+	out := cmdWriter(cmd, d)
+	_, _ = fmt.Fprintf(out, "[got] installed plugin %s (from %s) at %s\n", res.Name, res.Source, res.Path)
+	return nil
+}
+
+// installFromSource dispatches on whether the source looks like a
+// local path or a git URL. It is a small wrapper so runPluginInstall
+// stays readable and so tests can target either branch directly.
+func installFromSource(inst *plugin.Installer, source string) (plugin.InstallResult, error) {
+	if pluginSourceIsGitURL(source) {
+		return inst.InstallFromGit(source)
+	}
+	return inst.InstallFromPath(source)
+}
+
+// pluginSourceIsGitURL mirrors plugin.LooksLikeGitURL for the CLI's
+// dispatch needs. We deliberately duplicate the check here (rather
+// than exporting it) so the dispatch stays snappy and so the rule is
+// a single source of truth in the plugin package; the package's own
+// InstallFromGit does the final say.
+func pluginSourceIsGitURL(s string) bool {
+	return plugin.LooksLikeGitURL(s)
+}
+
+// newPluginEnableCmd builds `got plugin enable <name>`. The name
+// must be discoverable (it has to exist as either a PATH binary or
+// a .got/plugins/ binary) so the registry doesn't end up with
+// dangling entries that can never be invoked.
+func newPluginEnableCmd(d Deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "enable <name>",
+		Short: "Enable a discovered plugin in got.yml",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginEnable(cmd.Context(), cmd, d, args[0])
+		},
+	}
+	return cmd
+}
+
+func runPluginEnable(ctx context.Context, cmd *cobra.Command, d Deps, name string) error {
+	plugins, err := d.DiscoverPlugins(ctx)
+	if err != nil {
+		return err
+	}
+	if !pluginNameDiscovered(plugins, name) {
+		return gerr.Validation(fmt.Sprintf("plugin %q is not discovered (install it first, or check $PATH / .got/plugins/)", name))
+	}
+	workTree, err := d.Discover(".")
+	if err != nil {
+		return err
+	}
+	inst := plugin.NewInstaller(workTree)
+	if _, err := inst.Enable(name); err != nil {
+		return err
+	}
+	out := cmdWriter(cmd, d)
+	_, _ = fmt.Fprintf(out, "[got] enabled plugin %s\n", name)
+	return nil
+}
+
+// newPluginDisableCmd builds `got plugin disable <name>`. Disabling
+// a plugin that is not currently enabled is a no-op (idempotent).
+func newPluginDisableCmd(d Deps) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "disable <name>",
+		Short: "Disable a plugin in got.yml",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginDisable(cmd.Context(), cmd, d, args[0])
+		},
+	}
+	return cmd
+}
+
+func runPluginDisable(ctx context.Context, cmd *cobra.Command, d Deps, name string) error {
+	workTree, err := d.Discover(".")
+	if err != nil {
+		return err
+	}
+	inst := plugin.NewInstaller(workTree)
+	if _, err := inst.Disable(name); err != nil {
+		return err
+	}
+	out := cmdWriter(cmd, d)
+	_, _ = fmt.Fprintf(out, "[got] disabled plugin %s\n", name)
+	return nil
+}
+
+// newPluginSearchCmd is a friendly stub for `got plugin search`.
+// The spec's plugin registry lands in v0.2+; for v0.1 we register
+// the subcommand so `got plugin --help` advertises it but the body
+// tells the user to come back later.
+func newPluginSearchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search the plugin registry (not yet implemented in v0.1)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(*cobra.Command, []string) error {
-			return gerr.Validation("`got plugin install` is not yet implemented in v0.1; see got-spec.md §11 (planned for v0.5)")
+			return gerr.Validation("`got plugin search` is not yet implemented in v0.1; see got-spec.md §11 (planned for v0.2+)")
 		},
 	}
 }
@@ -192,13 +397,26 @@ func registerPluginCommands(root *cobra.Command, d Deps) int {
 	return added
 }
 
-// repoPluginsDir returns the .got/plugins/ path for the current
-// work tree, or "" if we're not in a git repo. Used by the
-// default Deps to wire DiscoverPlugins.
-func repoPluginsDir() string {
+// loadEnabledSet reads got.yml's plugins.enabled list as a set. A
+// missing or unparseable got.yml is treated as the empty set so
+// `got plugin list` keeps working in fresh repos.
+func loadEnabledSet() (map[string]bool, error) {
 	workTree, err := repo.Discover(".")
 	if err != nil {
-		return ""
+		// Not in a git repo: discovery itself fails; let the
+		// upstream caller surface that error.
+		return map[string]bool{}, err
 	}
-	return workTree + "/.got/plugins"
+	return plugin.NewInstaller(workTree).EnabledSet()
+}
+
+// pluginNameDiscovered reports whether name is in the list of
+// discovered plugins (PATH + .got/plugins/ + repo plugins).
+func pluginNameDiscovered(in []plugin.DiscoveredPlugin, name string) bool {
+	for _, p := range in {
+		if p.Name == name {
+			return true
+		}
+	}
+	return false
 }

@@ -11,7 +11,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/version"
 )
 
@@ -149,6 +148,3 @@ func newVersionCmd() *cobra.Command {
 		},
 	}
 }
-
-// newTUIStubCmd has been replaced by newTUICmd (see tui.go) which
-// drives the real dashboard per got-spec.md §14.

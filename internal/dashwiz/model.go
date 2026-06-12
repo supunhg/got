@@ -2,6 +2,7 @@ package dashwiz
 
 import (
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -43,11 +44,11 @@ type tabMeta struct {
 }
 
 var tabMetas = []tabMeta{
-	{tabStatus: "Status", title: "Status", description: "Working tree state (git status)", comingSoon: false},
-	{tabBranches: "Branches", title: "Branches", description: "Local branches + current/upstream", comingSoon: false},
-	{tabRemotes: "Remotes", title: "Remotes", description: "Read-only: mutation lands in v0.2", comingSoon: true},
-	{tabGraph: "Graph", title: "Graph", description: "Read-only preview: interactive renderer in v0.2", comingSoon: true},
-	{tabPlugins: "Plugins", title: "Plugins", description: "Read-only: interactive loader in v0.2", comingSoon: true},
+	{tab: tabStatus, title: "Status", description: "Working tree state (git status)", comingSoon: false},
+	{tab: tabBranches, title: "Branches", description: "Local branches + current/upstream", comingSoon: false},
+	{tab: tabRemotes, title: "Remotes", description: "Read-only: mutation lands in v0.2", comingSoon: true},
+	{tab: tabGraph, title: "Graph", description: "Read-only preview: interactive renderer in v0.2", comingSoon: true},
+	{tab: tabPlugins, title: "Plugins", description: "Read-only: interactive loader in v0.2", comingSoon: true},
 }
 
 // Model is the Bubbletea model for the dashboard. It holds a
@@ -397,8 +398,11 @@ func (m *Model) buildBranchTable() table.Model {
 		}
 		rows = append(rows, table.Row{name, sha, br.Upstream})
 	}
-	t := table.New(columns, rows)
-	t.SetHeight(20)
+	t := table.New(
+		table.WithColumns(columns),
+		table.WithRows(rows),
+		table.WithHeight(20),
+	)
 	// The default bubbles/table styles are unstyled; the
 	// dashboard applies the GOT theme so the table blends in
 	// with the rest of the surface.
@@ -407,8 +411,7 @@ func (m *Model) buildBranchTable() table.Model {
 		BorderTop(false).
 		BorderBottom(true).
 		BorderLeft(false).
-		BorderRight(false).
-		BorderHeader(false)
+		BorderRight(false)
 	s.Selected = s.Selected.
 		Foreground(m.theme.Selected.GetForeground()).
 		Bold(true)

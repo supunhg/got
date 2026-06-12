@@ -9,13 +9,8 @@ import (
 	"github.com/got-sh/got/internal/dashwiz"
 	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/graph"
-	"github.com/got-sh/got/internal/plugin"
 	"github.com/got-sh/got/internal/tui"
 )
-
-// newTUIStubCmd is the previous placeholder (kept for any test
-// that might reference it; the real implementation below replaces
-// it in root.go).
 
 // newTUICmd builds the `got tui` dashboard subcommand. The
 // default RunE drives the Bubbletea dashboard via Deps.RunDashboardWizard;
@@ -105,7 +100,12 @@ func buildDashboardInputs(ctx context.Context, d Deps, workTree string) (dashwiz
 	// We do this via the same code path `got graph --no-tui`
 	// uses so the preview is always consistent.
 	graphASCII, gerr := a.GraphASCII(ctx, git.GraphOpts{All: true, MaxCount: 20})
-	if gerr == nil {
+	// graph.Render("") returns "\n" (not ""), so an empty raw
+	// graph would slip past the "" check in
+	// printDashboardSummary and print a blank line. We only
+	// render when the raw output is non-empty so the "no graph"
+	// branch in the summary takes over.
+	if gerr == nil && graphASCII != "" {
 		inputs.GraphPreview = graph.Render(graphASCII, tui.NewTheme())
 	}
 	// Plugin discovery: best-effort. A discovery failure (e.g. no
@@ -140,6 +140,9 @@ func printDashboardSummary(cmd *cobra.Command, d Deps, inputs dashwiz.Inputs) er
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Remotes:")
 	fmt.Fprintf(out, "  %d configured\n", len(inputs.Remotes))
+	for _, r := range inputs.Remotes {
+		fmt.Fprintf(out, "    %s\t%s\n", r.Name, r.FetchURL)
+	}
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Graph preview:")
 	if inputs.GraphPreview == "" {
