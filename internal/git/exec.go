@@ -513,10 +513,147 @@ func (a *ExecAdapter) Reset(_ context.Context, _ string, _ ResetMode) error {
 	return gerr.Validation("`got reset` is not yet implemented in v0.1")
 }
 
-func (a *ExecAdapter) Fetch(_ context.Context, _ string) error {
-	return gerr.Validation("`got fetch` is not yet implemented in v0.1")
+// Fetch implements Adapter. An empty remote name fetches the default
+// remote's tracking branches.
+func (a *ExecAdapter) Fetch(ctx context.Context, remote string) error {
+	args := []string{"fetch"}
+	if remote != "" {
+		args = append(args, remote)
+	}
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
 }
 
-func (a *ExecAdapter) Push(_ context.Context, _, _ string, _ PushOpts) error {
-	return gerr.Validation("`got push` is not yet implemented in v0.1")
+// FetchPrune implements Adapter. Like Fetch but passes --prune so
+// stale remote-tracking refs are removed as part of the fetch.
+func (a *ExecAdapter) FetchPrune(ctx context.Context, remote string) error {
+	args := []string{"fetch", "--prune"}
+	if remote != "" {
+		args = append(args, remote)
+	}
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// FetchAll implements Adapter. Runs `git fetch --all` (and
+// optionally `--prune`).
+func (a *ExecAdapter) FetchAll(ctx context.Context, prune bool) error {
+	args := []string{"fetch", "--all"}
+	if prune {
+		args = append(args, "--prune")
+	}
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// Push implements Adapter. The CLI layer is responsible for refusing
+// non-fast-forward pushes unless ForceWithLease or Force is set; the
+// adapter just translates the request.
+func (a *ExecAdapter) Push(ctx context.Context, remote, branch string, opts PushOpts) error {
+	if remote == "" {
+		return gerr.Validation("push remote is empty")
+	}
+	if branch == "" {
+		return gerr.Validation("push branch is empty")
+	}
+	args := []string{"push"}
+	if opts.ForceWithLease {
+		args = append(args, "--force-with-lease")
+	} else if opts.Force {
+		args = append(args, "--force")
+	}
+	if opts.SetUpstream {
+		args = append(args, "--set-upstream")
+	}
+	if opts.Tags {
+		args = append(args, "--tags")
+	}
+	args = append(args, remote, branch)
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// RemoteAdd implements Adapter.
+func (a *ExecAdapter) RemoteAdd(ctx context.Context, name, url string) error {
+	if name == "" {
+		return gerr.Validation("remote name is empty")
+	}
+	if url == "" {
+		return gerr.Validation("remote URL is empty")
+	}
+	_, _, err := a.run(ctx, "remote", "add", name, url)
+	if err != nil {
+		return gerr.GitError(err, "remote", "add", name, url)
+	}
+	return nil
+}
+
+// RemoteRemove implements Adapter. The force flag is a CLI-level
+// guard (refuse to remove a remote with tracking branches unless
+// --force); `git remote remove` itself has no --force flag.
+func (a *ExecAdapter) RemoteRemove(ctx context.Context, name string, force bool) error {
+	if name == "" {
+		return gerr.Validation("remote name is empty")
+	}
+	_ = force
+	_, _, err := a.run(ctx, "remote", "remove", name)
+	if err != nil {
+		return gerr.GitError(err, "remote", "remove", name)
+	}
+	return nil
+}
+
+// RemoteRename implements Adapter.
+func (a *ExecAdapter) RemoteRename(ctx context.Context, oldName, newName string) error {
+	if oldName == "" || newName == "" {
+		return gerr.Validation("remote rename requires both old and new names")
+	}
+	_, _, err := a.run(ctx, "remote", "rename", oldName, newName)
+	if err != nil {
+		return gerr.GitError(err, "remote", "rename", oldName, newName)
+	}
+	return nil
+}
+
+// RemoteSetURL implements Adapter. When pushURL is true the push URL
+// is updated (`git remote set-url --push`); otherwise the fetch URL
+// is updated.
+func (a *ExecAdapter) RemoteSetURL(ctx context.Context, name, url string, pushURL bool) error {
+	if name == "" || url == "" {
+		return gerr.Validation("remote set-url requires both name and URL")
+	}
+	args := []string{"remote", "set-url"}
+	if pushURL {
+		args = append(args, "--push")
+	}
+	args = append(args, name, url)
+	_, _, err := a.run(ctx, args...)
+	if err != nil {
+		return gerr.GitError(err, args...)
+	}
+	return nil
+}
+
+// RemotePrune implements Adapter.
+func (a *ExecAdapter) RemotePrune(ctx context.Context, name string) error {
+	if name == "" {
+		return gerr.Validation("remote name is empty")
+	}
+	_, _, err := a.run(ctx, "remote", "prune", name)
+	if err != nil {
+		return gerr.GitError(err, "remote", "prune", name)
+	}
+	return nil
 }

@@ -62,6 +62,23 @@ type FakeAdapter struct {
 	CreateBranchCalls []FakeCreateBranchCall
 	DeleteBranchErr   error
 	DeleteBranchCalls []FakeDeleteBranchCall
+
+	FetchPruneErr   error
+	FetchPruneCalls []FakeFetchCall
+	FetchAllErr     error
+	FetchAllCalls   int
+	FetchAllPrune   bool
+
+	RemoteAddErr      error
+	RemoteAddCalls    []FakeRemoteAddCall
+	RemoteRemoveErr   error
+	RemoteRemoveCalls []FakeRemoteRemoveCall
+	RemoteRenameErr   error
+	RemoteRenameCalls []FakeRemoteRenameCall
+	RemoteSetURLErr   error
+	RemoteSetURLCalls []FakeRemoteSetURLCall
+	RemotePruneErr    error
+	RemotePruneCalls  []FakeFetchCall
 }
 
 // FakeCommitCall records arguments to a Commit call.
@@ -116,6 +133,31 @@ type FakeCreateBranchCall struct {
 type FakeDeleteBranchCall struct {
 	Name  string
 	Force bool
+}
+
+// FakeRemoteAddCall records arguments to a RemoteAdd call.
+type FakeRemoteAddCall struct {
+	Name string
+	URL  string
+}
+
+// FakeRemoteRemoveCall records arguments to a RemoteRemove call.
+type FakeRemoteRemoveCall struct {
+	Name  string
+	Force bool
+}
+
+// FakeRemoteRenameCall records arguments to a RemoteRename call.
+type FakeRemoteRenameCall struct {
+	OldName string
+	NewName string
+}
+
+// FakeRemoteSetURLCall records arguments to a RemoteSetURL call.
+type FakeRemoteSetURLCall struct {
+	Name    string
+	URL     string
+	PushURL bool
 }
 
 // NewFake returns a FakeAdapter with safe defaults: an empty Status,
@@ -221,4 +263,40 @@ func (f *FakeAdapter) CreateBranch(_ context.Context, name, startPoint string) e
 func (f *FakeAdapter) DeleteBranch(_ context.Context, name string, force bool) error {
 	f.DeleteBranchCalls = append(f.DeleteBranchCalls, FakeDeleteBranchCall{Name: name, Force: force})
 	return f.DeleteBranchErr
+}
+
+func (f *FakeAdapter) FetchPrune(_ context.Context, remote string) error {
+	f.FetchPruneCalls = append(f.FetchPruneCalls, FakeFetchCall{Remote: remote})
+	return f.FetchPruneErr
+}
+
+func (f *FakeAdapter) FetchAll(_ context.Context, prune bool) error {
+	f.FetchAllCalls++
+	f.FetchAllPrune = prune
+	return f.FetchAllErr
+}
+
+func (f *FakeAdapter) RemoteAdd(_ context.Context, name, url string) error {
+	f.RemoteAddCalls = append(f.RemoteAddCalls, FakeRemoteAddCall{Name: name, URL: url})
+	return f.RemoteAddErr
+}
+
+func (f *FakeAdapter) RemoteRemove(_ context.Context, name string, force bool) error {
+	f.RemoteRemoveCalls = append(f.RemoteRemoveCalls, FakeRemoteRemoveCall{Name: name, Force: force})
+	return f.RemoteRemoveErr
+}
+
+func (f *FakeAdapter) RemoteRename(_ context.Context, oldName, newName string) error {
+	f.RemoteRenameCalls = append(f.RemoteRenameCalls, FakeRemoteRenameCall{OldName: oldName, NewName: newName})
+	return f.RemoteRenameErr
+}
+
+func (f *FakeAdapter) RemoteSetURL(_ context.Context, name, url string, pushURL bool) error {
+	f.RemoteSetURLCalls = append(f.RemoteSetURLCalls, FakeRemoteSetURLCall{Name: name, URL: url, PushURL: pushURL})
+	return f.RemoteSetURLErr
+}
+
+func (f *FakeAdapter) RemotePrune(_ context.Context, name string) error {
+	f.RemotePruneCalls = append(f.RemotePruneCalls, FakeFetchCall{Remote: name})
+	return f.RemotePruneErr
 }

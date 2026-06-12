@@ -147,4 +147,23 @@ type Adapter interface {
 	// the branch is deleted even if it has unmerged work
 	// (`git branch -D`); otherwise `git branch -d` is used.
 	DeleteBranch(ctx context.Context, name string, force bool) error
+	// RemoteAdd adds a remote with the given name and URL.
+	RemoteAdd(ctx context.Context, name, url string) error
+	// RemoteRemove removes the named remote. Callers should refuse
+	// to remove a remote with tracking branches unless force is true.
+	RemoteRemove(ctx context.Context, name string, force bool) error
+	// RemoteRename renames a remote.
+	RemoteRename(ctx context.Context, oldName, newName string) error
+	// RemoteSetURL updates the fetch (or push, when pushURL is set)
+	// URL for an existing remote.
+	RemoteSetURL(ctx context.Context, name, url string, pushURL bool) error
+	// RemotePrune deletes stale remote-tracking branches under the
+	// given remote (`git remote prune`).
+	RemotePrune(ctx context.Context, name string) error
+	// FetchPrune is like Fetch but passes --prune so stale
+	// remote-tracking refs are removed as part of the fetch.
+	FetchPrune(ctx context.Context, remote string) error
+	// FetchAll runs `git fetch --all` to update every configured
+	// remote in one call.
+	FetchAll(ctx context.Context, prune bool) error
 }
