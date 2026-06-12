@@ -56,12 +56,15 @@ skipped and a plain summary is printed.`,
 // and plugin discovery, and either drives the Bubbletea model
 // (TTY) or prints a non-interactive summary (non-TTY / --no-tui).
 func runDashboard(ctx context.Context, cmd *cobra.Command, d Deps) error {
+	logger := loggerFor(d)
+	logger.Info("dashboard starting")
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
 	}
 	inputs, err := buildDashboardInputs(ctx, d, workTree)
 	if err != nil {
+		logger.Warn("dashboard inputs failed", "err", err.Error())
 		return err
 	}
 	// Honor the global --no-tui flag.
@@ -71,10 +74,12 @@ func runDashboard(ctx context.Context, cmd *cobra.Command, d Deps) error {
 	}
 	isTTY := d.IsTerminal != nil && d.IsTerminal()
 	if !noTUI && isTTY && d.RunDashboardWizard != nil {
+		logger.Info("dashboard launching tui")
 		return d.RunDashboardWizard(ctx, inputs, tui.NewTheme())
 	}
 	// Non-TTY / --no-tui fallback: print a compact text summary
 	// of the same data so CI / scripts can see the snapshot.
+	logger.Info("dashboard printing non-tty summary")
 	return printDashboardSummary(cmd, d, inputs)
 }
 

@@ -203,6 +203,8 @@ skipped and the command prints a plain list.`,
 // reads the git worktree list, merges the .got/worktrees.json
 // porcelain records, and renders a table or JSON.
 func runWorktreeList(ctx context.Context, cmd *cobra.Command, d Deps, asJSON bool) error {
+	logger := loggerFor(d)
+	logger.Info("worktree list starting", "json", asJSON)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -210,13 +212,16 @@ func runWorktreeList(ctx context.Context, cmd *cobra.Command, d Deps, asJSON boo
 	a := depsAdapter(d, workTree)
 	wts, err := a.WorktreeList(ctx)
 	if err != nil {
+		logger.Warn("worktree list failed", "err", err.Error())
 		return err
 	}
 	records, err := readWorktreeRecords(workTree)
 	if err != nil {
+		logger.Warn("worktree porcelain read failed", "err", err.Error())
 		return err
 	}
 	merged := mergeWorktreePorcelain(wts, records)
+	logger.Info("worktree list finished", "count", len(merged))
 	if asJSON {
 		return writeJSON(cmdWriter(cmd, d), merged)
 	}
@@ -227,6 +232,8 @@ func runWorktreeList(ctx context.Context, cmd *cobra.Command, d Deps, asJSON boo
 // updates) the corresponding porcelain record so the picker
 // shows it on the next `got worktree list`.
 func runWorktreeAdd(ctx context.Context, cmd *cobra.Command, d Deps, path string, opts git.WorktreeAddOpts) error {
+	logger := loggerFor(d)
+	logger.Info("worktree add starting", "path", path, "branch", opts.Branch, "detach", opts.Detach, "force", opts.Force)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -238,6 +245,7 @@ func runWorktreeAdd(ctx context.Context, cmd *cobra.Command, d Deps, path string
 	abs := absPath(workTree, path)
 	a := depsAdapter(d, workTree)
 	if err := a.WorktreeAdd(ctx, abs, opts); err != nil {
+		logger.Warn("worktree add failed", "path", abs, "err", err.Error())
 		return err
 	}
 	store := worktree.NewStore(worktreePath(workTree))
@@ -252,6 +260,7 @@ func runWorktreeAdd(ctx context.Context, cmd *cobra.Command, d Deps, path string
 		}
 		return *existing
 	})
+	logger.Info("worktree add finished", "path", abs)
 	_, _ = fmt.Fprintf(d.Stdout, "[got] created worktree at %s\n", abs)
 	return nil
 }
@@ -260,6 +269,8 @@ func runWorktreeAdd(ctx context.Context, cmd *cobra.Command, d Deps, path string
 // record so the picker stops showing the deleted worktree.
 // Refuses to remove the main worktree.
 func runWorktreeRemove(ctx context.Context, cmd *cobra.Command, d Deps, path string, force bool) error {
+	logger := loggerFor(d)
+	logger.Info("worktree remove starting", "path", path, "force", force)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -267,20 +278,24 @@ func runWorktreeRemove(ctx context.Context, cmd *cobra.Command, d Deps, path str
 	a := depsAdapter(d, workTree)
 	wts, err := a.WorktreeList(ctx)
 	if err != nil {
+		logger.Warn("worktree list failed", "err", err.Error())
 		return err
 	}
 	abs := absPath(workTree, path)
 	for _, w := range wts {
 		if w.Path == abs && w.IsMain {
+			logger.Warn("worktree remove refused: main worktree", "path", abs)
 			return gerr.Validation(fmt.Sprintf("refusing to remove the main worktree (%s); switch to another worktree first", abs))
 		}
 	}
 	if err := a.WorktreeRemove(ctx, abs, force); err != nil {
+		logger.Warn("worktree remove failed", "path", abs, "err", err.Error())
 		return err
 	}
 	// Drop the porcelain record.
 	store := worktree.NewStore(worktreePath(workTree))
 	_, _ = store.Remove(abs)
+	logger.Info("worktree remove finished", "path", abs, "force", force)
 	if force {
 		_, _ = fmt.Fprintf(d.Stdout, "[got] force-removed worktree at %s\n", abs)
 	} else {
@@ -291,6 +306,8 @@ func runWorktreeRemove(ctx context.Context, cmd *cobra.Command, d Deps, path str
 
 // runWorktreeLock wraps WorktreeLock.
 func runWorktreeLock(ctx context.Context, cmd *cobra.Command, d Deps, path, reason string) error {
+	logger := loggerFor(d)
+	logger.Info("worktree lock starting", "path", path, "reason", reason)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -298,14 +315,18 @@ func runWorktreeLock(ctx context.Context, cmd *cobra.Command, d Deps, path, reas
 	a := depsAdapter(d, workTree)
 	abs := absPath(workTree, path)
 	if err := a.WorktreeLock(ctx, abs, reason); err != nil {
+		logger.Warn("worktree lock failed", "path", abs, "err", err.Error())
 		return err
 	}
+	logger.Info("worktree lock finished", "path", abs)
 	_, _ = fmt.Fprintf(d.Stdout, "[got] locked worktree at %s\n", abs)
 	return nil
 }
 
 // runWorktreeUnlock wraps WorktreeUnlock.
 func runWorktreeUnlock(ctx context.Context, cmd *cobra.Command, d Deps, path string) error {
+	logger := loggerFor(d)
+	logger.Info("worktree unlock starting", "path", path)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -313,22 +334,28 @@ func runWorktreeUnlock(ctx context.Context, cmd *cobra.Command, d Deps, path str
 	a := depsAdapter(d, workTree)
 	abs := absPath(workTree, path)
 	if err := a.WorktreeUnlock(ctx, abs); err != nil {
+		logger.Warn("worktree unlock failed", "path", abs, "err", err.Error())
 		return err
 	}
+	logger.Info("worktree unlock finished", "path", abs)
 	_, _ = fmt.Fprintf(d.Stdout, "[got] unlocked worktree at %s\n", abs)
 	return nil
 }
 
 // runWorktreePrune wraps WorktreePrune.
 func runWorktreePrune(ctx context.Context, cmd *cobra.Command, d Deps) error {
+	logger := loggerFor(d)
+	logger.Info("worktree prune starting")
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
 	}
 	a := depsAdapter(d, workTree)
 	if err := a.WorktreePrune(ctx); err != nil {
+		logger.Warn("worktree prune failed", "err", err.Error())
 		return err
 	}
+	logger.Info("worktree prune finished")
 	_, _ = fmt.Fprintln(d.Stdout, "[got] pruned worktree bookkeeping")
 	return nil
 }
@@ -338,6 +365,8 @@ func runWorktreePrune(ctx context.Context, cmd *cobra.Command, d Deps) error {
 // resolves a single path; we then update the porcelain record's
 // LastAttachedAt and print a hint to `cd` into the worktree.
 func runWorktreeAttach(ctx context.Context, cmd *cobra.Command, d Deps, pathFlag string) error {
+	logger := loggerFor(d)
+	logger.Info("worktree attach starting", "pathFlag", pathFlag)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -345,10 +374,12 @@ func runWorktreeAttach(ctx context.Context, cmd *cobra.Command, d Deps, pathFlag
 	a := depsAdapter(d, workTree)
 	wts, err := a.WorktreeList(ctx)
 	if err != nil {
+		logger.Warn("worktree list failed", "err", err.Error())
 		return err
 	}
 	records, err := readWorktreeRecords(workTree)
 	if err != nil {
+		logger.Warn("worktree porcelain read failed", "err", err.Error())
 		return err
 	}
 	merged := mergeWorktreePorcelain(wts, records)

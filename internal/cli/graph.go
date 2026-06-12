@@ -72,6 +72,8 @@ Graphviz DOT representation suitable for piping to ` + "`dot -Tsvg`" + `.`,
 //	--no-tui / non-TTY -> raw styled graph to stdout
 //	TTY + no --no-tui -> Bubbletea pager via graphwiz.Run
 func runGraph(cmd *cobra.Command, deps Deps, opts git.GraphOpts, asDOT bool) error {
+	logger := loggerFor(deps)
+	logger.Info("graph starting", "dot", asDOT, "maxCount", opts.MaxCount, "all", opts.All)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
@@ -81,6 +83,7 @@ func runGraph(cmd *cobra.Command, deps Deps, opts git.GraphOpts, asDOT bool) err
 	if asDOT {
 		dot, err := a.GraphDOT(cmd.Context(), opts)
 		if err != nil {
+			logger.Warn("graph DOT failed", "err", err.Error())
 			return err
 		}
 		out := cmdWriter(cmd, deps)
@@ -88,11 +91,17 @@ func runGraph(cmd *cobra.Command, deps Deps, opts git.GraphOpts, asDOT bool) err
 			dot += "\n"
 		}
 		_, err = io.WriteString(out, dot)
-		return err
+		if err != nil {
+			logger.Warn("graph DOT write failed", "err", err.Error())
+			return err
+		}
+		logger.Info("graph finished", "format", "dot", "bytes", len(dot))
+		return nil
 	}
 
 	raw, err := a.GraphASCII(cmd.Context(), opts)
 	if err != nil {
+		logger.Warn("graph ASCII failed", "err", err.Error())
 		return err
 	}
 
@@ -106,12 +115,18 @@ func runGraph(cmd *cobra.Command, deps Deps, opts git.GraphOpts, asDOT bool) err
 		out := cmdWriter(cmd, deps)
 		_, err := io.WriteString(out, raw)
 		if err != nil {
+			logger.Warn("graph write failed", "err", err.Error())
 			return err
 		}
 		if raw != "" && !endsWithNewline(raw) {
 			_, err = io.WriteString(out, "\n")
 		}
-		return err
+		if err != nil {
+			logger.Warn("graph write failed", "err", err.Error())
+			return err
+		}
+		logger.Info("graph finished", "format", "ascii", "bytes", len(raw))
+		return nil
 	}
 
 	// TUI path: style the content, then drop into the pager.
@@ -120,10 +135,13 @@ func runGraph(cmd *cobra.Command, deps Deps, opts git.GraphOpts, asDOT bool) err
 	if err := deps.RunGraphWizard(cmd.Context(), styled, theme); err != nil {
 		// CancelledError is a normal exit; surface as a no-op.
 		if err == graphwiz.CancelledError {
+			logger.Info("graph cancelled by user")
 			return nil
 		}
+		logger.Warn("graph pager failed", "err", err.Error())
 		return err
 	}
+	logger.Info("graph finished", "format", "tui", "bytes", len(styled))
 	return nil
 }
 
