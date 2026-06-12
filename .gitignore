@@ -1,0 +1,20 @@
+# Build artifacts
+bin/
+*.test
+*.out
+coverage.out
+coverage.html
+
+# GOT-managed in-repo metadata
+.got/
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*~
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

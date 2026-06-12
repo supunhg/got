@@ -1,0 +1,46 @@
+run:
+  timeout: 5m
+  tests: true
+
+# Linter set matches got-spec.md §3 exactly. Add new linters only via
+# a spec update so the CI gate stays predictable.
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - revive
+    - staticcheck
+    - gocritic
+    - misspell
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # too noisy for a young codebase
+  revive:
+    rules:
+      - name: var-naming
+      - name: package-comments
+      - name: exported
+      - name: error-strings
+      - name: error-naming
+  misspell:
+    locale: US
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+      - performance
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocritic
+        - revive
+    - linters:
+        - staticcheck
+      text: "ST1000:"  # package comments enforced by revive instead
+  max-issues-per-linter: 0
+  max-same-issues: 0
