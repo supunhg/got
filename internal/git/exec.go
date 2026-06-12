@@ -382,8 +382,61 @@ func (a *ExecAdapter) CurrentRef(ctx context.Context) (string, error) {
 // Stubs for the rest of the interface. v0.1 doesn't need them; v0.2 will
 // fill them in (and the snapshot engine will start using them).
 
-func (a *ExecAdapter) Commit(_ context.Context, _ string, _ CommitOpts) (SHA, error) {
-	return "", gerr.Validation("`got commit` is not yet implemented in v0.1; the commit wizard lands in step 5 of got-spec.md §24")
+func (a *ExecAdapter) Commit(ctx context.Context, msg string, opts CommitOpts) (SHA, error) {
+	if msg == "" {
+		return "", gerr.Validation("commit message is empty")
+	}
+	args := []string{"commit"}
+	if opts.Amend {
+		args = append(args, "--amend")
+	}
+	if opts.AllowEmpty {
+		args = append(args, "--allow-empty")
+	}
+	if opts.Signoff {
+		args = append(args, "--signoff")
+	}
+	if opts.NoVerify {
+		args = append(args, "--no-verify")
+	}
+	if opts.Author != "" {
+		args = append(args, "--author="+opts.Author)
+	}
+	// Use -F - and pipe the message on stdin for multi-line; use
+	// -m for single-line so we don't depend on a tty for stdin.
+	multi := strings.Contains(msg, "\n")
+	if multi {
+		args = append(args, "-F", "-")
+	} else {
+		args = append(args, "-m", msg)
+	}
+
+	cmd := exec.CommandContext(ctx, a.GitPath, args...)
+	cmd.Dir = a.WorkTree
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if multi {
+		cmd.Stdin = strings.NewReader(msg)
+	}
+	if len(a.Env) > 0 {
+		cmd.Env = append(os.Environ(), a.Env...)
+	}
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd.Stdout = &stdoutBuf
+	cmd.Stderr = &stderrBuf
+	if err := cmd.Run(); err != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return "", ctxErr
+		}
+		return "", gerr.GitError(err, args...)
+	}
+	// Resolve the new SHA via `git rev-parse HEAD`. Slightly racy in
+	// the sense that the work tree could have changed in between,
+	// but for a CLI invocation this is the standard pattern.
+	shaOut, _, err := a.run(ctx, "rev-parse", "HEAD")
+	if err != nil {
+		return "", gerr.GitError(err, "rev-parse", "HEAD")
+	}
+	return SHA(strings.TrimSpace(string(shaOut))), nil
 }
 
 func (a *ExecAdapter) Checkout(_ context.Context, _ string, _ CheckoutOpts) error {

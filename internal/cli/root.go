@@ -91,10 +91,11 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 		return nil
 	}
 
-	// Subcommands. v0.1 has: version, init, status, branch, remote, tui (stub).
+	// Subcommands. v0.1 has: version, init, status, commit, branch, remote, tui (stub).
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newInitCmd(d))
 	cmd.AddCommand(newStatusCmd(d))
+	cmd.AddCommand(newCommitCmd(d))
 	cmd.AddCommand(newBranchCmd(d))
 	cmd.AddCommand(newRemoteCmd(d))
 	cmd.AddCommand(newTUIStubCmd())

@@ -133,4 +133,10 @@ type Adapter interface {
 	Push(ctx context.Context, remote, branch string, opts PushOpts) error
 	Log(ctx context.Context, rangeStr string, format LogFormat) (io.Reader, error)
 	CurrentRef(ctx context.Context) (string, error)
+	// Stage stages the given paths with `git add`. An empty list is a no-op.
+	Stage(ctx context.Context, paths []string) error
+	// Unstage unstages the given paths with `git reset HEAD --`. An empty list is a no-op.
+	Unstage(ctx context.Context, paths []string) error
+	// StageAllTracked stages modifications to all tracked files (`git add -u`).
+	StageAllTracked(ctx context.Context) error
 }

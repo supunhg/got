@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"context"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,65 +10,25 @@ import (
 	"github.com/got-sh/got/internal/git"
 )
 
-// fakeAdapter is an in-test git.Adapter that returns a preset
-// Status and panics on every other method. It exists so status tests
-// don't have to depend on a real `git` binary. For tests that need
-// a real adapter, use git.NewExecAdapter directly.
+// fakeAdapter is the in-package Adapter used by cli tests. It value-embeds
+// git.FakeAdapter so the call-recording fields (CommitCalls, StageCalls,
+// StageAllTrackedCalls, etc.) and the Adapter methods (Status, Commit,
+// Stage, etc.) are all promoted onto *fakeAdapter. A zero-value
+// `&fakeAdapter{}` is therefore fully usable: FakeAdapter's zero value
+// has safe defaults (empty slices for the call arrays; nil StatusVal
+// yields the zero Status).
 type fakeAdapter struct {
-	status git.Status
-	err    error
+	git.FakeAdapter
 }
 
-func (f *fakeAdapter) Status(_ context.Context) (git.Status, error) {
-	return f.status, f.err
-}
+// newFakeAdapter returns a fresh fakeAdapter with safe defaults.
+func newFakeAdapter() *fakeAdapter { return &fakeAdapter{} }
 
-// All other git.Adapter methods are unimplemented on purpose: status
-// tests do not exercise them. Calling one will panic loudly so a
-// future test that needs a more capable fake is forced to extend
-// this type explicitly.
-func (f *fakeAdapter) Commit(_ context.Context, _ string, _ git.CommitOpts) (git.SHA, error) {
-	panic("fakeAdapter.Commit: not implemented")
-}
-
-func (f *fakeAdapter) Branches(_ context.Context) ([]git.Branch, error) {
-	panic("fakeAdapter.Branches: not implemented")
-}
-
-func (f *fakeAdapter) RemoteBranches(_ context.Context) ([]git.Branch, error) {
-	panic("fakeAdapter.RemoteBranches: not implemented")
-}
-
-func (f *fakeAdapter) Remotes(_ context.Context) ([]git.Remote, error) {
-	panic("fakeAdapter.Remotes: not implemented")
-}
-
-func (f *fakeAdapter) Checkout(_ context.Context, _ string, _ git.CheckoutOpts) error {
-	panic("fakeAdapter.Checkout: not implemented")
-}
-
-func (f *fakeAdapter) Merge(_ context.Context, _ string, _ git.MergeOpts) error {
-	panic("fakeAdapter.Merge: not implemented")
-}
-
-func (f *fakeAdapter) Reset(_ context.Context, _ string, _ git.ResetMode) error {
-	panic("fakeAdapter.Reset: not implemented")
-}
-
-func (f *fakeAdapter) Fetch(_ context.Context, _ string) error {
-	panic("fakeAdapter.Fetch: not implemented")
-}
-
-func (f *fakeAdapter) Push(_ context.Context, _, _ string, _ git.PushOpts) error {
-	panic("fakeAdapter.Push: not implemented")
-}
-
-func (f *fakeAdapter) Log(_ context.Context, _ string, _ git.LogFormat) (io.Reader, error) {
-	panic("fakeAdapter.Log: not implemented")
-}
-
-func (f *fakeAdapter) CurrentRef(_ context.Context) (string, error) {
-	panic("fakeAdapter.CurrentRef: not implemented")
+// fakeAdapterFor returns a fakeAdapter pre-loaded with a Status.
+func fakeAdapterFor(s git.Status) *fakeAdapter {
+	a := newFakeAdapter()
+	a.StatusVal = s
+	return a
 }
 
 // runGit runs `git args...` in dir and fails the test on error.

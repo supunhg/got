@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/got-sh/got/internal/commitwiz"
 	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/initwiz"
 	"github.com/got-sh/got/internal/repo"
@@ -29,6 +30,10 @@ type Deps struct {
 	// the user confirms or cancels. Tests stub this to return canned
 	// Answers without a real terminal.
 	RunWizard func(detected initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error)
+	// RunCommitWizard starts the interactive commit wizard and blocks
+	// until the user confirms or cancels. Tests stub this to return
+	// canned Answers without a real terminal.
+	RunCommitWizard func(staged []string, pre commitwiz.PrePopulated) (commitwiz.Answers, error)
 	// IsTerminal reports whether stdout is a TTY. When false, the
 	// init command skips the wizard and uses defaults from flags.
 	IsTerminal func() bool
@@ -58,6 +63,9 @@ func defaultDeps() Deps {
 		StoreFor: store.Open,
 		RunWizard: func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
 			return initwiz.Run(d, pre, theme)
+		},
+		RunCommitWizard: func(staged []string, pre commitwiz.PrePopulated) (commitwiz.Answers, error) {
+			return commitwiz.Run(staged, pre, commitwiz.NewHeuristicSuggester(), tui.NewTheme())
 		},
 		IsTerminal: defaultIsTerminal,
 		Now:        time.Now,

@@ -35,11 +35,6 @@ func initDepsForStatus(stdout, stderr *bytes.Buffer, a git.Adapter, workTree str
 	}
 }
 
-// fakeAdapterFor returns a fakeAdapter that yields the given Status.
-func fakeAdapterFor(s git.Status) *fakeAdapter {
-	return &fakeAdapter{status: s}
-}
-
 // TestStatusCmd_CleanRepo shows the "nothing to commit" line and an
 // initialized GOT section (or uninitialized hint).
 func TestStatusCmd_CleanRepo(t *testing.T) {

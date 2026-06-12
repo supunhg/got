@@ -48,6 +48,15 @@ type FakeAdapter struct {
 	FetchCalls    []FakeFetchCall
 	PushErr       error
 	PushCalls     []FakePushCall
+
+	// Stage / Unstage / StageAllTracked. Tests can set Err fields
+	// to simulate failure, and inspect Calls for assertion.
+	StageErr             error
+	StageCalls           [][]string
+	UnstageErr           error
+	UnstageCalls         [][]string
+	StageAllTrackedErr   error
+	StageAllTrackedCalls int
 }
 
 // FakeCommitCall records arguments to a Commit call.
@@ -167,4 +176,22 @@ func (f *FakeAdapter) Log(_ context.Context, rangeStr string, format LogFormat) 
 func (f *FakeAdapter) CurrentRef(_ context.Context) (string, error) {
 	f.CurrentRefCalls++
 	return f.CurrentRefVal, f.CurrentRefErr
+}
+
+func (f *FakeAdapter) Stage(_ context.Context, paths []string) error {
+	// Copy to avoid test-mutation surprises.
+	cp := append([]string{}, paths...)
+	f.StageCalls = append(f.StageCalls, cp)
+	return f.StageErr
+}
+
+func (f *FakeAdapter) Unstage(_ context.Context, paths []string) error {
+	cp := append([]string{}, paths...)
+	f.UnstageCalls = append(f.UnstageCalls, cp)
+	return f.UnstageErr
+}
+
+func (f *FakeAdapter) StageAllTracked(_ context.Context) error {
+	f.StageAllTrackedCalls++
+	return f.StageAllTrackedErr
 }
