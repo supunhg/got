@@ -61,6 +61,31 @@ func New(w io.Writer, format, level string) (*slog.Logger, error) {
 	return slog.New(h), nil
 }
 
+// Tee returns a *slog.Logger that writes every record to every
+// writer in writers, using the same format and level for all of
+// them. This is the "log to both stderr and a file" case per spec
+// §16: when --log-file is set, the user wants a full session log
+// on disk while still seeing the chatter live in the terminal.
+//
+// A nil or empty writers slice is rejected. A single-element slice
+// delegates to New (no MultiWriter overhead). A nil element in
+// the slice is rejected up front so the failure is loud rather
+// than appearing as a broken write later.
+func Tee(writers []io.Writer, format, level string) (*slog.Logger, error) {
+	if len(writers) == 0 {
+		return nil, fmt.Errorf("log: Tee requires at least one writer")
+	}
+	for i, w := range writers {
+		if w == nil {
+			return nil, fmt.Errorf("log: Tee writers[%d] is nil", i)
+		}
+	}
+	if len(writers) == 1 {
+		return New(writers[0], format, level)
+	}
+	return New(io.MultiWriter(writers...), format, level)
+}
+
 // Discard returns a *slog.Logger that drops every record. It is
 // the logger the TUI uses so the dashboard can never write to
 // stderr. The slog.NewTextHandler(io.Discard, nil) form uses the

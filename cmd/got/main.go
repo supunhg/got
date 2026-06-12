@@ -44,17 +44,24 @@ func main() {
 // pflag directly with ContinueOnError + an io.Discard writer so
 // any parse problem is silently ignored here and re-surfaced by
 // cobra with the proper usage text.
+//
+// When --log-file is set, the logger is teed to that file (created
+// in append mode, 0600 perms) in addition to w. The file is closed
+// when the process exits; partial writes are acceptable per spec
+// §16 (the log is best-effort).
 func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
 	fs := flag.NewFlagSet("got-log-init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		level  string
-		format = gotlog.FormatText
-		noTUI  bool
+		level   string
+		format  = gotlog.FormatText
+		noTUI   bool
+		logFile string
 	)
 	fs.StringVar(&level, "log-level", "", "log level: debug|info|warn|error")
 	fs.StringVar(&format, "log-format", gotlog.FormatText, "log output format: text|json")
 	fs.BoolVar(&noTUI, "no-tui", false, "force plain CLI output even in wizards")
+	fs.StringVar(&logFile, "log-file", "", "also append every log record to this file (created if missing)")
 	_ = fs.Parse(args)
 
 	mode := gotlog.ModeInteractive
@@ -64,7 +71,21 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
 	if level == "" {
 		level = gotlog.DefaultLevel(mode)
 	}
+	writers := []io.Writer{w}
+	if logFile != "" {
+		f, ferr := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		if ferr != nil {
+			return nil, fmt.Errorf("log: open --log-file %q: %w", logFile, ferr)
+		}
+		// Note: f is intentionally not closed. The process is
+		// about to exit and the OS reclaims the fd. Closing
+		// here would race with concurrent writes from goroutines
+		// spawned by subcommands (e.g. plugin install), so
+		// leaving the fd open is the correct choice for a
+		// short-lived CLI process.
+		writers = append(writers, f)
+	}
 	// gotlog.New returns *slog.Logger; we keep the import alias
 	// short so the cli package can also import it without a clash.
-	return gotlog.New(w, format, level)
+	return gotlog.Tee(writers, format, level)
 }

@@ -7,6 +7,7 @@ package log
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"strings"
 	"testing"
@@ -190,5 +191,64 @@ func TestDiscard_DropsAllRecords(t *testing.T) {
 	// confirm the logger is non-nil and the four calls don't panic.
 	if logger == nil {
 		t.Error("Discard() returned nil")
+	}
+}
+
+func TestTee_WritesToAllWriters(t *testing.T) {
+	var a, b bytes.Buffer
+	logger, err := Tee([]io.Writer{&a, &b}, FormatText, "info")
+	if err != nil {
+		t.Fatalf("Tee: %v", err)
+	}
+	logger.Info("hello", "k", "v")
+	for label, buf := range map[string]*bytes.Buffer{"a": &a, "b": &b} {
+		if !strings.Contains(buf.String(), "hello") {
+			t.Errorf("writer %s missing 'hello': %q", label, buf.String())
+		}
+		if !strings.Contains(buf.String(), "k=v") {
+			t.Errorf("writer %s missing k=v: %q", label, buf.String())
+		}
+	}
+}
+
+func TestTee_SingleWriterDelegatesToNew(t *testing.T) {
+	var buf bytes.Buffer
+	logger, err := Tee([]io.Writer{&buf}, FormatText, "info")
+	if err != nil {
+		t.Fatalf("Tee: %v", err)
+	}
+	logger.Info("solo")
+	if !strings.Contains(buf.String(), "solo") {
+		t.Errorf("expected 'solo' in single-writer output, got: %q", buf.String())
+	}
+}
+
+func TestTee_RejectsEmptyWriters(t *testing.T) {
+	if _, err := Tee(nil, FormatText, "info"); err == nil {
+		t.Error("expected error for nil writers slice")
+	}
+	if _, err := Tee([]io.Writer{}, FormatText, "info"); err == nil {
+		t.Error("expected error for empty writers slice")
+	}
+}
+
+func TestTee_RejectsNilWriterInSlice(t *testing.T) {
+	var a bytes.Buffer
+	if _, err := Tee([]io.Writer{&a, nil}, FormatText, "info"); err == nil {
+		t.Error("expected error when writers slice contains nil")
+	}
+}
+
+func TestTee_PropagatesUnknownFormat(t *testing.T) {
+	var buf bytes.Buffer
+	if _, err := Tee([]io.Writer{&buf}, "yaml", "info"); err == nil {
+		t.Error("expected error for unknown format")
+	}
+}
+
+func TestTee_PropagatesUnknownLevel(t *testing.T) {
+	var buf bytes.Buffer
+	if _, err := Tee([]io.Writer{&buf}, FormatText, "trace"); err == nil {
+		t.Error("expected error for unknown level")
 	}
 }
