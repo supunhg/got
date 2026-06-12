@@ -25,11 +25,12 @@ import (
 // daemons would want a higher rotation count (path.1, path.2,
 // ...); that is intentionally not in scope for v0.1.
 type RotatingFile struct {
-	path     string
-	maxBytes int64
-	mu       sync.Mutex
-	f        *os.File
-	bytes    int64
+	path      string
+	maxBytes  int64
+	mu        sync.Mutex
+	f         *os.File
+	bytes     int64
+	rotations int64
 }
 
 // OpenRotatingFile opens (or creates) path for append and returns
@@ -136,6 +137,37 @@ func (r *RotatingFile) Path() string {
 	return r.path
 }
 
+// Size returns the current on-disk size of the log file in bytes.
+// For the non-rotating case the value tracks every Write's byte
+// count under the mutex; for the rotating case the value is reset
+// to 0 on each rotation, so Size() always reports the size of the
+// *current* file, not the cumulative bytes ever written. That
+// matches the spec §16 "current file size" wording for the post-
+// exit summary.
+func (r *RotatingFile) Size() int64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.bytes
+}
+
+// Rotations returns the number of times the on-disk log file has
+// been rotated so far. Always zero when rotation is disabled
+// (maxBytes == 0) or for a RotatingFile that has not seen a
+// rotation yet. The counter is incremented exactly once per
+// successful rename-and-reopen, so a Write that triggers rotation
+// increments by one even though many bytes may move.
+func (r *RotatingFile) Rotations() int64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rotations
+}
+
 // rotateLocked performs the rename-and-reopen dance. Caller must
 // hold r.mu. The existing fd is closed, the file is renamed to
 // path+".1" (overwriting any previous .1), and a fresh fd is
@@ -165,6 +197,7 @@ func (r *RotatingFile) rotateLocked() error {
 	}
 	r.f = f
 	r.bytes = 0
+	r.rotations++
 	return nil
 }
 

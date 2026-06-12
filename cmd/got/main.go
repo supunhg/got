@@ -18,16 +18,46 @@ import (
 )
 
 func main() {
-	logger, logCfgErr := buildLogger(os.Args[1:], os.Stderr)
+	// run() returns the exit code so the deferred session-log
+	// summary print can fire on every path (success, subcommand
+	// error, panic-recovered). os.Exit bypasses defers, so we
+	// route through a helper: main() calls os.Exit(run()), and
+	// the defer in run() runs when run() returns, before
+	// main() forwards the code to os.Exit. This is the standard
+	// pattern for "do something at exit, then exit with a
+	// computed code".
+	os.Exit(run())
+}
+
+// run is main's body. It is split out so the deferred
+// session-log summary (registered here) fires on both the
+// success and the error path; if main() called os.Exit
+// directly, defers would be skipped and the summary would
+// never reach the user. Returns the process exit code per
+// spec §15.
+func run() int {
+	logger, sessionLog, logCfgErr := buildLogger(os.Args[1:], os.Stderr)
 	if logCfgErr != nil {
 		// Bad logging config is a usage error (spec §15: code 2).
 		fmt.Fprintln(os.Stderr, "got:", logCfgErr)
-		os.Exit(int(gerr.CodeUsage))
+		return int(gerr.CodeUsage)
 	}
+	// Print the session-log summary at exit, after the command
+	// has run, so the user can find the captured trace even if
+	// the subcommand errored. The defer fires on both the
+	// success and the error path; printing to stderr keeps the
+	// summary out of stdout (which most subcommands use for
+	// their own data output).
+	defer func() {
+		if sessionLog != nil {
+			fmt.Fprintln(os.Stderr, sessionLog.Summary())
+		}
+	}()
 	if err := cli.Execute(logger); err != nil {
 		fmt.Fprintln(os.Stderr, "got:", gerr.UserMessage(err))
-		os.Exit(gerr.ExitCode(err))
+		return gerr.ExitCode(err)
 	}
+	return 0
 }
 
 // buildLogger parses the two logging-related persistent flags
@@ -57,7 +87,16 @@ func main() {
 // kept; the v0.1 policy is "what just happened" rather than
 // long-term retention. A max size of 0 (the default) disables
 // rotation, matching the pre-rotation behavior.
-func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
+//
+// The file writer is wrapped in a *CountingWriter so the returned
+// SessionLog can report how many records were written to the file
+// at command exit. The wrapper sits OUTSIDE the rotation logic
+// (counter → RotatingFile → os.File) so the count reflects every
+// record across all rotations, not just the current file.
+//
+// The returned SessionLog is nil when --log-file is not set; main()
+// uses that to decide whether to print the post-exit summary line.
+func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, error) {
 	fs := flag.NewFlagSet("got-log-init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
@@ -82,26 +121,48 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
 		level = gotlog.DefaultLevel(mode)
 	}
 	writers := []io.Writer{w}
+	var sessionLog *gotlog.SessionLog
 	if logFile != "" {
-		var f io.Writer
+		var fileWriter io.Writer
+		var rotator *gotlog.RotatingFile
+		var plainFile *os.File
 		var ferr error
 		if logMaxSize > 0 {
-			f, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024)
+			rotator, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024)
+			fileWriter = rotator
 		} else {
-			f, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			plainFile, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			fileWriter = plainFile
 		}
 		if ferr != nil {
-			return nil, fmt.Errorf("log: open --log-file %q: %w", logFile, ferr)
+			return nil, nil, fmt.Errorf("log: open --log-file %q: %w", logFile, ferr)
 		}
-		// Note: f is intentionally not closed. The process is
-		// about to exit and the OS reclaims the fd. Closing
-		// here would race with concurrent writes from goroutines
-		// spawned by subcommands (e.g. plugin install), so
-		// leaving the fd open is the correct choice for a
-		// short-lived CLI process.
-		writers = append(writers, f)
+		// Note: the file is intentionally not closed. The
+		// process is about to exit and the OS reclaims the fd.
+		// Closing here would race with concurrent writes from
+		// goroutines spawned by subcommands (e.g. plugin
+		// install), so leaving the fd open is the correct
+		// choice for a short-lived CLI process.
+		//
+		// Wrap the file writer in a CountingWriter so the
+		// session-log summary at command exit can report
+		// record count. The wrapper sits ABOVE the rotation
+		// logic (counter sees every record, including ones
+		// that have been rotated to .1).
+		counter := gotlog.NewCountingWriter(fileWriter)
+		writers = append(writers, counter)
+		sessionLog = &gotlog.SessionLog{
+			Path:      logFile,
+			Counter:   counter,
+			Rotator:   rotator,
+			PlainFile: plainFile,
+		}
 	}
 	// gotlog.New returns *slog.Logger; we keep the import alias
 	// short so the cli package can also import it without a clash.
-	return gotlog.Tee(writers, format, level)
+	logger, err := gotlog.Tee(writers, format, level)
+	if err != nil {
+		return nil, nil, err
+	}
+	return logger, sessionLog, nil
 }

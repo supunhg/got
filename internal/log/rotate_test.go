@@ -78,7 +78,7 @@ func TestRotatingFile_RotatesWhenSizeExceeded(t *testing.T) {
 func TestRotatingFile_MultipleRotationsOverwriteBackup(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "log.txt")
-	r, err := OpenRotatingFile(path, 3)
+	r, err := OpenRotatingFile(path, 1)
 	if err != nil {
 		t.Fatalf("OpenRotatingFile: %v", err)
 	}
@@ -221,6 +221,106 @@ func TestOpenRotatingFile_RejectsNegativeMaxBytes(t *testing.T) {
 	path := filepath.Join(dir, "log.txt")
 	if _, err := OpenRotatingFile(path, -1); err == nil {
 		t.Error("expected error for negative maxBytes")
+	}
+}
+
+func TestRotatingFile_RotationsStartsAtZero(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 0)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	if got := r.Rotations(); got != 0 {
+		t.Errorf("Rotations() = %d, want 0 (no rotations yet)", got)
+	}
+}
+
+func TestRotatingFile_RotationsCount(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 1)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	// Three writes, each crosses the threshold, so three rotations.
+	// With 1-byte writes and maxBytes=1, the first write
+	// lands at exactly the threshold (no rotation), and each
+	// of the next three writes triggers a rotation. Total: 3.
+	for i, payload := range []string{"A", "B", "C", "D"} {
+		if _, err := r.Write([]byte(payload)); err != nil {
+			t.Fatalf("Write %d: %v", i, err)
+		}
+	}
+	if got, want := r.Rotations(), int64(3); got != want {
+		t.Errorf("Rotations() = %d, want %d", got, want)
+	}
+}
+
+func TestRotatingFile_SizeTracksBytes(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	// Pre-populate so the writer's accounting has to honor the
+	// existing bytes.
+	if err := os.WriteFile(path, []byte("12345"), 0o600); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	r, err := OpenRotatingFile(path, 0) // 0 = no rotation
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	if got, want := r.Size(), int64(5); got != want {
+		t.Errorf("Size() after seed = %d, want %d", got, want)
+	}
+	if _, err := r.Write([]byte("678")); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	if got, want := r.Size(), int64(8); got != want {
+		t.Errorf("Size() after Write = %d, want %d", got, want)
+	}
+}
+
+func TestRotatingFile_SizeResetsAfterRotation(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "log.txt")
+	r, err := OpenRotatingFile(path, 5)
+	if err != nil {
+		t.Fatalf("OpenRotatingFile: %v", err)
+	}
+	defer func() { _ = r.Close() }()
+	// First write: 5 bytes, exactly at the threshold.
+	if _, err := r.Write([]byte("12345")); err != nil {
+		t.Fatalf("Write 1: %v", err)
+	}
+	if got, want := r.Size(), int64(5); got != want {
+		t.Errorf("Size() pre-rotation = %d, want %d", got, want)
+	}
+	// Second write: 1 byte, would push size to 6 > 5, rotates.
+	if _, err := r.Write([]byte("X")); err != nil {
+		t.Fatalf("Write 2: %v", err)
+	}
+	// After rotation, current file holds only "X" (1 byte).
+	if got, want := r.Size(), int64(1); got != want {
+		t.Errorf("Size() post-rotation = %d, want %d", got, want)
+	}
+	if got, want := r.Rotations(), int64(1); got != want {
+		t.Errorf("Rotations() = %d, want %d", got, want)
+	}
+}
+
+func TestRotatingFile_NilReceiverReturnsZero(t *testing.T) {
+	var r *RotatingFile
+	if got := r.Size(); got != 0 {
+		t.Errorf("nil Size() = %d, want 0", got)
+	}
+	if got := r.Rotations(); got != 0 {
+		t.Errorf("nil Rotations() = %d, want 0", got)
+	}
+	if got := r.Path(); got != "" {
+		t.Errorf("nil Path() = %q, want \"\"", got)
 	}
 }
 
