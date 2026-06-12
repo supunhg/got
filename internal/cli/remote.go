@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/url"
 	"strings"
 	"text/tabwriter"
@@ -266,15 +267,19 @@ func newRemoteFetchCmd(deps Deps) *cobra.Command {
 }
 
 func runRemoteFetch(cmd *cobra.Command, deps Deps, args []string, prune, all bool) error {
+	logger := remoteLogger(deps)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
 	}
 	a := deps.AdapterFor(workTree)
 	if all {
+		logger.Info("remote fetch-all starting", "prune", prune)
 		if err := a.FetchAll(cmd.Context(), prune); err != nil {
+			logger.Warn("remote fetch-all failed", "err", err.Error())
 			return err
 		}
+		logger.Info("remote fetch-all finished")
 		fmt.Fprintln(cmdWriter(cmd, deps), "Fetched all remotes")
 		return nil
 	}
@@ -282,15 +287,19 @@ func runRemoteFetch(cmd *cobra.Command, deps Deps, args []string, prune, all boo
 		return gerr.Validation("fetch requires a remote name or --all")
 	}
 	name := args[0]
+	logger.Info("remote fetch starting", "name", name, "prune", prune)
 	if prune {
 		if err := a.FetchPrune(cmd.Context(), name); err != nil {
+			logger.Warn("remote fetch failed", "name", name, "prune", true, "err", err.Error())
 			return err
 		}
 	} else {
 		if err := a.Fetch(cmd.Context(), name); err != nil {
+			logger.Warn("remote fetch failed", "name", name, "err", err.Error())
 			return err
 		}
 	}
+	logger.Info("remote fetch finished", "name", name)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Fetched %s\n", name)
 	return nil
 }
@@ -334,11 +343,33 @@ func runRemotePush(cmd *cobra.Command, deps Deps, name, branch string, force, fo
 		return err
 	}
 	a := deps.AdapterFor(workTree)
+	logger := remoteLogger(deps)
+	logger.Info("remote push starting", "name", name, "branch", branch, "force", opts.Force, "forceWithLease", opts.ForceWithLease, "setUpstream", opts.SetUpstream, "tags", opts.Tags)
 	if err := a.Push(cmd.Context(), name, branch, opts); err != nil {
-		return wrapPushError(err, name, branch, forceWithLease || force)
+		wrapped := wrapPushError(err, name, branch, forceWithLease || force)
+		// Per spec §16, non-fast-forward is a recoverable issue
+		// (the user can re-run with --force-with-lease) and so
+		// deserves a warn record alongside the validation error
+		// the user sees.
+		if wrapped != err {
+			logger.Warn("remote push rejected", "name", name, "branch", branch, "err", err.Error())
+		} else {
+			logger.Warn("remote push failed", "name", name, "branch", branch, "err", err.Error())
+		}
+		return wrapped
 	}
+	logger.Info("remote push finished", "name", name, "branch", branch)
 	fmt.Fprintf(cmdWriter(cmd, deps), "Pushed %s to %s\n", branch, name)
 	return nil
+}
+
+// remoteLogger returns deps.Logger or a discard fallback so remote
+// commands don't need to nil-check the logger at every call site.
+func remoteLogger(d Deps) *slog.Logger {
+	if d.Logger != nil {
+		return d.Logger
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
 // wrapPushError annotates a non-fast-forward push error with guidance

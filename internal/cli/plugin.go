@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"text/tabwriter"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,15 @@ import (
 	"github.com/got-sh/got/internal/plugin"
 	"github.com/got-sh/got/internal/repo"
 )
+
+// pluginLogger returns deps.Logger or a no-op fallback. Centralized
+// so plugin commands don't have to nil-check at every call site.
+func pluginLogger(d Deps) *slog.Logger {
+	if d.Logger != nil {
+		return d.Logger
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // newPluginCmd builds the `got plugin` subcommand tree per spec §11.
 //
@@ -240,6 +250,8 @@ filename is derived from the source's manifest: got-<name>. Pass
 }
 
 func runPluginInstall(_ context.Context, cmd *cobra.Command, d Deps, source string, force bool) error {
+	logger := pluginLogger(d)
+	logger.Info("plugin install starting", "source", source, "force", force)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
@@ -248,8 +260,10 @@ func runPluginInstall(_ context.Context, cmd *cobra.Command, d Deps, source stri
 	inst.Overwrite = force
 	res, err := installFromSource(inst, source)
 	if err != nil {
+		logger.Warn("plugin install failed", "source", source, "err", err.Error())
 		return err
 	}
+	logger.Info("plugin install finished", "name", res.Name, "path", res.Path, "version", res.Version)
 	out := cmdWriter(cmd, d)
 	_, _ = fmt.Fprintf(out, "[got] installed plugin %s (from %s) at %s\n", res.Name, res.Source, res.Path)
 	return nil
@@ -291,11 +305,14 @@ func newPluginEnableCmd(d Deps) *cobra.Command {
 }
 
 func runPluginEnable(ctx context.Context, cmd *cobra.Command, d Deps, name string) error {
+	logger := pluginLogger(d)
+	logger.Info("plugin enable starting", "name", name)
 	plugins, err := d.DiscoverPlugins(ctx)
 	if err != nil {
 		return err
 	}
 	if !pluginNameDiscovered(plugins, name) {
+		logger.Warn("plugin enable failed: not discovered", "name", name)
 		return gerr.Validation(fmt.Sprintf("plugin %q is not discovered (install it first, or check $PATH / .got/plugins/)", name))
 	}
 	workTree, err := d.Discover(".")
@@ -304,8 +321,10 @@ func runPluginEnable(ctx context.Context, cmd *cobra.Command, d Deps, name strin
 	}
 	inst := plugin.NewInstaller(workTree)
 	if _, err := inst.Enable(name); err != nil {
+		logger.Warn("plugin enable failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("plugin enable finished", "name", name)
 	out := cmdWriter(cmd, d)
 	_, _ = fmt.Fprintf(out, "[got] enabled plugin %s\n", name)
 	return nil
@@ -326,14 +345,18 @@ func newPluginDisableCmd(d Deps) *cobra.Command {
 }
 
 func runPluginDisable(ctx context.Context, cmd *cobra.Command, d Deps, name string) error {
+	logger := pluginLogger(d)
+	logger.Info("plugin disable starting", "name", name)
 	workTree, err := d.Discover(".")
 	if err != nil {
 		return err
 	}
 	inst := plugin.NewInstaller(workTree)
 	if _, err := inst.Disable(name); err != nil {
+		logger.Warn("plugin disable failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("plugin disable finished", "name", name)
 	out := cmdWriter(cmd, d)
 	_, _ = fmt.Fprintf(out, "[got] disabled plugin %s\n", name)
 	return nil
