@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -186,6 +187,14 @@ func applyCommit(ctx context.Context, a git.Adapter, ans commitwiz.Answers, opts
 	}
 
 	msg := ans.Render()
+	// Reject empty subjects at the gate: a rendered message of
+	// "feat: \n" is technically non-empty, so a plain `msg == ""`
+	// check would let it through and produce a bogus commit. The
+	// wizard's subject screen also bounces on empty input; this
+	// keeps the non-interactive path consistent.
+	if strings.TrimSpace(ans.Subject) == "" {
+		return gerr.Validation("commit message subject is empty")
+	}
 	if msg == "" {
 		return gerr.Validation("commit message is empty")
 	}

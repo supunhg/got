@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/got-sh/got/internal/commitwiz"
+	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/git"
 )
 
@@ -172,6 +173,12 @@ func TestCommitCmd_NotInGitRepoFails(t *testing.T) {
 	stderr := &bytes.Buffer{}
 	a := &fakeAdapter{}
 	deps := commitDepsFor(stdout, stderr, a, "/nope")
+	// Override Discover so runCommit returns the not-in-git-repo
+	// error from gerr, matching what production code would emit
+	// when `got commit` runs outside a git work tree.
+	deps.Discover = func(string) (string, error) {
+		return "", gerr.NotInGitRepo(".")
+	}
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
