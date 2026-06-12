@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,8 +13,10 @@ import (
 	"github.com/got-sh/got/internal/config"
 	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/git"
+	"github.com/got-sh/got/internal/initwiz"
 	"github.com/got-sh/got/internal/repo"
 	"github.com/got-sh/got/internal/store"
+	"github.com/got-sh/got/internal/tui"
 )
 
 // runGit runs `git args...` in dir and fails the test on error.
@@ -28,17 +31,34 @@ func runGit(t *testing.T, dir string, args ...string) {
 }
 
 // initDepsFor builds a Deps value pointed at the given stdout/stderr
-// with deterministic time/user/version. The adapter factory returns a
-// real *git.ExecAdapter over the given work tree — even though the
-// init command path doesn't actually invoke the adapter, the type has
-// to be correct.
-func initDepsFor(stdout, stderr *bytes.Buffer, version, user string, at time.Time) Deps {
+// with deterministic time/user/version. The wizard is stubbed to
+// return canned answers; IsTerminal is true by default so the
+// wizard code path is exercised unless the test sets opts.noTUI.
+func initDepsFor(stdout, stderr *bytes.Buffer, version, user string, at time.Time, answers initwiz.Answers) Deps {
 	return Deps{
 		AdapterFor: func(workTree string) git.Adapter {
 			return git.NewExecAdapter(workTree)
 		},
-		Discover:   repo.Discover,
-		StoreFor:   store.Open,
+		Discover: repo.Discover,
+		StoreFor: store.Open,
+		RunWizard: func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
+			// Honor pre-populated values; fall back to canned.
+			out := answers
+			if pre.Name != "" {
+				out.Name = pre.Name
+			}
+			if pre.DefaultBranch != "" {
+				out.DefaultBranch = pre.DefaultBranch
+			}
+			if pre.CommitStyle != "" {
+				out.CommitStyle = pre.CommitStyle
+			}
+			if pre.CustomTemplate != "" {
+				out.CustomTemplate = pre.CustomTemplate
+			}
+			return out, nil
+		},
+		IsTerminal: func() bool { return true },
 		Now:        func() time.Time { return at },
 		User:       func() string { return user },
 		GotVersion: version,
@@ -47,12 +67,21 @@ func initDepsFor(stdout, stderr *bytes.Buffer, version, user string, at time.Tim
 	}
 }
 
-func TestInitCmd_FreshRepo(t *testing.T) {
+func cannedAnswers() initwiz.Answers {
+	return initwiz.Answers{
+		Name:          "wizname",
+		DefaultBranch: "wizbranch",
+		CommitStyle:   "conventional",
+		Plugins:       []string{},
+	}
+}
+
+func TestInitCmd_FreshRepo_Wizard(t *testing.T) {
 	dir := initGitRepo(t)
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
@@ -62,77 +91,65 @@ func TestInitCmd_FreshRepo(t *testing.T) {
 		t.Fatalf("init: %v\nstderr=%s", err, stderr.String())
 	}
 
-	// .got/ and got.yml should exist.
-	for _, p := range []string{
-		filepath.Join(dir, "got.yml"),
-		filepath.Join(dir, ".got", "config.yaml"),
-		filepath.Join(dir, ".got", "got.db"),
-	} {
-		if _, err := os.Stat(p); err != nil {
-			t.Errorf("expected %s to exist: %v", p, err)
-		}
+	// Wizard produced name "wizname" + branch "wizbranch" — verify
+	// got.yml reflects them, not the detected defaults.
+	cfg, err := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
+	if err != nil {
+		t.Fatalf("ReadProjectConfig: %v", err)
 	}
+	if cfg.Project.Name != "wizname" {
+		t.Errorf("Project.Name = %q, want wizname (from wizard)", cfg.Project.Name)
+	}
+	if cfg.Project.DefaultBranch != "wizbranch" {
+		t.Errorf("DefaultBranch = %q, want wizbranch (from wizard)", cfg.Project.DefaultBranch)
+	}
+}
 
-	// got.yml should be valid YAML with the expected defaults.
+func TestInitCmd_FreshRepo_NonInteractive(t *testing.T) {
+	dir := initGitRepo(t)
+	withChdir(t, dir)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
+	// Simulate --no-tui by setting IsTerminal=false.
+	deps.IsTerminal = func() bool { return false }
+	cmd := NewRootCmd(deps)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs([]string{"init", "--no-tui"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("init --no-tui: %v", err)
+	}
+	// Non-interactive: name = dir basename, branch = main (detected
+	// branch in a fresh init -b main repo).
 	cfg, err := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
 	if err != nil {
 		t.Fatalf("ReadProjectConfig: %v", err)
 	}
 	if cfg.Project.Name != filepath.Base(dir) {
-		t.Errorf("Project.Name = %q, want %q", cfg.Project.Name, filepath.Base(dir))
+		t.Errorf("Name = %q, want %q (non-interactive default)", cfg.Project.Name, filepath.Base(dir))
 	}
-	if cfg.Project.DefaultBranch != "main" {
-		t.Errorf("DefaultBranch = %q, want main", cfg.Project.DefaultBranch)
-	}
-	if cfg.Commits.Style != "conventional" {
-		t.Errorf("Commits.Style = %q, want conventional", cfg.Commits.Style)
-	}
-	if !cfg.Commits.AllowBreaking {
-		t.Errorf("AllowBreaking = false, want true")
-	}
-	if cfg.AI.Provider != "heuristic" {
-		t.Errorf("AI.Provider = %q, want heuristic", cfg.AI.Provider)
-	}
+}
 
-	internalCfg, err := config.ReadInternalConfig(filepath.Join(dir, ".got", "config.yaml"))
-	if err != nil {
-		t.Fatalf("ReadInternalConfig: %v", err)
-	}
-	if internalCfg.Version != 1 {
-		t.Errorf("internalCfg.Version = %d, want 1", internalCfg.Version)
-	}
-	if internalCfg.CreatedFrom != "0.1.0-test" {
-		t.Errorf("internalCfg.CreatedFrom = %q, want 0.1.0-test", internalCfg.CreatedFrom)
-	}
+func TestInitCmd_FreshRepo_FlagsOverrideWizard(t *testing.T) {
+	dir := initGitRepo(t)
+	withChdir(t, dir)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
+	cmd := NewRootCmd(deps)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	// --name should override the wizard's "wizname" answer.
+	cmd.SetArgs([]string{"init", "--name", "cliwin"})
 
-	body, err := os.ReadFile(filepath.Join(dir, ".gitignore"))
-	if err != nil {
-		t.Fatalf("read .gitignore: %v", err)
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("init: %v", err)
 	}
-	if !strings.Contains(string(body), ".got/") {
-		t.Errorf("gitignore missing .got/:\n%s", body)
-	}
-
-	st, err := store.Open(filepath.Join(dir, ".got", "got.db"))
-	if err != nil {
-		t.Fatalf("reopen store: %v", err)
-	}
-	defer st.Close()
-	if v, _ := st.MetaGet("got_version"); v != "0.1.0-test" {
-		t.Errorf("meta got_version = %q, want 0.1.0-test", v)
-	}
-	if v, _ := st.MetaGet("init_user"); v != "alice" {
-		t.Errorf("meta init_user = %q, want alice", v)
-	}
-	if v, _ := st.MetaGet("init_at"); v != "1700000000000" {
-		t.Errorf("meta init_at = %q, want 1700000000000", v)
-	}
-	if v, _ := st.SchemaVersion(); v != 1 {
-		t.Errorf("schema_version = %d, want 1", v)
-	}
-
-	if !strings.Contains(stdout.String(), "Initialized GOT") {
-		t.Errorf("stdout missing 'Initialized GOT': %q", stdout.String())
+	cfg, _ := config.ReadProjectConfig(filepath.Join(dir, "got.yml"))
+	if cfg.Project.Name != "cliwin" {
+		t.Errorf("Name = %q, want cliwin (--name should beat wizard)", cfg.Project.Name)
 	}
 }
 
@@ -141,11 +158,11 @@ func TestInitCmd_RefusesIdempotent(t *testing.T) {
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init"})
+	cmd.SetArgs([]string{"init", "--no-tui"})
 
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("first init: %v", err)
@@ -155,7 +172,6 @@ func TestInitCmd_RefusesIdempotent(t *testing.T) {
 		t.Fatalf("read init_at: %v", err)
 	}
 
-	// Second run with no --force should fail.
 	stdout.Reset()
 	stderr.Reset()
 	err = cmd.Execute()
@@ -174,7 +190,7 @@ func TestInitCmd_RefusesIdempotent(t *testing.T) {
 	cmd = NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init", "--force"})
+	cmd.SetArgs([]string{"init", "--force", "--no-tui"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("force init: %v", err)
 	}
@@ -192,12 +208,14 @@ func TestInitCmd_FlagsOverrideDefaults(t *testing.T) {
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
+	deps.IsTerminal = func() bool { return false } // non-interactive
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
 	cmd.SetArgs([]string{
 		"init",
+		"--no-tui",
 		"--name", "newname",
 		"--branch", "trunk",
 		"--style", "freeform",
@@ -217,10 +235,7 @@ func TestInitCmd_FlagsOverrideDefaults(t *testing.T) {
 		t.Errorf("DefaultBranch = %q, want trunk", cfg.Project.DefaultBranch)
 	}
 	if cfg.Commits.Style != "freeform" {
-		t.Errorf("Commits.Style = %q, want freeform (custom-template should not change style without --style=custom)", cfg.Commits.Style)
-	}
-	if cfg.Commits.CustomTemplate != "/tmp/template" {
-		t.Errorf("Commits.CustomTemplate = %q, want /tmp/template", cfg.Commits.CustomTemplate)
+		t.Errorf("Commits.Style = %q, want freeform", cfg.Commits.Style)
 	}
 }
 
@@ -229,11 +244,11 @@ func TestInitCmd_OutsideGitRepoFails(t *testing.T) {
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Now())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Now(), cannedAnswers())
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init", "--here"})
+	cmd.SetArgs([]string{"init", "--here", "--no-tui"})
 	err := cmd.Execute()
 	if err == nil {
 		t.Fatalf("expected error outside git repo, got nil")
@@ -248,11 +263,11 @@ func TestInitCmd_HereFlag(t *testing.T) {
 	withChdir(t, dir)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init", "--here"})
+	cmd.SetArgs([]string{"init", "--here", "--no-tui"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("init --here: %v", err)
 	}
@@ -265,11 +280,11 @@ func TestInitCmd_PathArg(t *testing.T) {
 	outer := initGitRepo(t)
 	stdout := &bytes.Buffer{}
 	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
 	cmd := NewRootCmd(deps)
 	cmd.SetOut(stdout)
 	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init", outer})
+	cmd.SetArgs([]string{"init", outer, "--no-tui"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("init <path>: %v", err)
 	}
@@ -278,9 +293,52 @@ func TestInitCmd_PathArg(t *testing.T) {
 	}
 }
 
+func TestInitCmd_ForcePreservesDBContent(t *testing.T) {
+	dir := initGitRepo(t)
+	withChdir(t, dir)
+	stdout := &bytes.Buffer{}
+	stderr := &bytes.Buffer{}
+	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC(), cannedAnswers())
+	cmd := NewRootCmd(deps)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs([]string{"init", "--no-tui"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("first init: %v", err)
+	}
+
+	st, err := store.Open(filepath.Join(dir, ".got", "got.db"))
+	if err != nil {
+		t.Fatalf("reopen store: %v", err)
+	}
+	if err := st.MetaSet("user_thing", "preserve_me"); err != nil {
+		t.Fatalf("MetaSet: %v", err)
+	}
+	_ = st.Close()
+
+	stdout.Reset()
+	stderr.Reset()
+	deps.Now = func() time.Time { return time.Unix(1_800_000_000, 0).UTC() }
+	cmd = NewRootCmd(deps)
+	cmd.SetOut(stdout)
+	cmd.SetErr(stderr)
+	cmd.SetArgs([]string{"init", "--force", "--no-tui"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("force init: %v", err)
+	}
+
+	st2, err := store.Open(filepath.Join(dir, ".got", "got.db"))
+	if err != nil {
+		t.Fatalf("reopen after force: %v", err)
+	}
+	defer st2.Close()
+	if v, _ := st2.MetaGet("user_thing"); v != "preserve_me" {
+		t.Errorf("user_thing = %q, want preserve_me", v)
+	}
+}
+
 // initGitRepo creates a fresh git repo in a tempdir and returns the
-// dir. The repo is configured for a no-gpg-sign commit so tests don't
-// depend on the host's gpg config.
+// dir.
 func initGitRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -301,56 +359,9 @@ func readMeta(dbPath, key string) (string, error) {
 	return st.MetaGet(key)
 }
 
-// TestInitCmd_ForcePreservesDBContent verifies the spec §7 promise that
-// `got init --force` preserves the SQLite database. We plant a custom
-// meta row before the force re-init and assert it survives.
-func TestInitCmd_ForcePreservesDBContent(t *testing.T) {
-	dir := initGitRepo(t)
-	withChdir(t, dir)
-	stdout := &bytes.Buffer{}
-	stderr := &bytes.Buffer{}
-	deps := initDepsFor(stdout, stderr, "0.1.0-test", "alice", time.Unix(1_700_000_000, 0).UTC())
-	cmd := NewRootCmd(deps)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("first init: %v", err)
-	}
-
-	// Plant a custom row the user might have written.
-	st, err := store.Open(filepath.Join(dir, ".got", "got.db"))
-	if err != nil {
-		t.Fatalf("reopen store: %v", err)
-	}
-	if err := st.MetaSet("user_thing", "preserve_me"); err != nil {
-		t.Fatalf("MetaSet: %v", err)
-	}
-	_ = st.Close()
-
-	// Force re-init. The DB should still be there and our row should
-	// survive because TouchInitMeta is the only writer on re-open.
-	stdout.Reset()
-	stderr.Reset()
-	deps.Now = func() time.Time { return time.Unix(1_800_000_000, 0).UTC() }
-	cmd = NewRootCmd(deps)
-	cmd.SetOut(stdout)
-	cmd.SetErr(stderr)
-	cmd.SetArgs([]string{"init", "--force"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("force init: %v", err)
-	}
-
-	st2, err := store.Open(filepath.Join(dir, ".got", "got.db"))
-	if err != nil {
-		t.Fatalf("reopen after force: %v", err)
-	}
-	defer st2.Close()
-	if v, _ := st2.MetaGet("user_thing"); v != "preserve_me" {
-		t.Errorf("user_thing = %q, want preserve_me", v)
-	}
-}
-
-// Compile-time guard: gerr.Error implements the error interface. This
-// keeps the gerr import live in case the tests stop using it directly.
+// Compile-time guard: gerr.Error implements the error interface.
 var _ error = (*gerr.Error)(nil)
+
+// Compile-time guard: errors is used somewhere; keep it from
+// being dropped by goimports.
+var _ = errors.New

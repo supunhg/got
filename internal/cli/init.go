@@ -8,7 +8,9 @@ import (
 
 	"github.com/got-sh/got/internal/config"
 	"github.com/got-sh/got/internal/gerr"
+	"github.com/got-sh/got/internal/initwiz"
 	"github.com/got-sh/got/internal/repo"
+	"github.com/got-sh/got/internal/tui"
 )
 
 // initOptions holds the resolved values for `got init`. Fields are
@@ -30,8 +32,12 @@ type initOptions struct {
 	customTemplate string
 	// force allows overwriting an existing .got/config.yaml.
 	force bool
-	// noInteractive is implicit in v0.1 — there is no wizard yet.
-	// We keep the flag for forward compatibility with step 4 (§24).
+	// noTUI forces the non-interactive path even when stdout is a TTY.
+	noTUI bool
+	// noInteractive is the --no-interactive flag. v0.1 has no wizard
+	// TTY check, so the flag is now equivalent to --no-tui; we keep
+	// it for forward compatibility with §7's "use defaults instead of
+	// prompting" semantics.
 	noInteractive bool
 }
 
@@ -45,15 +51,21 @@ func newInitCmd(d Deps) *cobra.Command {
 
 Creates the .got/ directory tree, writes got.yml and .got/config.yaml,
 appends .got/ to .gitignore, and opens the SQLite store at .got/got.db
-with all migrations applied. The interactive wizard is not implemented
-in v0.1; defaults are used and may be overridden with --name, --branch,
---style, and --custom-template.
+with all migrations applied. By default an interactive wizard walks
+through the detected values, commit style, plugins, and a final
+confirm screen; pass --no-tui to use defaults without prompting.
 
 If [path] is omitted, the current directory is used.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				opts.target = args[0]
+			}
+			// --no-tui is a global flag; read it from the
+			// persistent flags so callers can pass it before or
+			// after the subcommand.
+			if v, err := cmd.Flags().GetBool("no-tui"); err == nil {
+				opts.noTUI = v
 			}
 			return runInit(cmd, d, opts)
 		},
@@ -65,22 +77,18 @@ If [path] is omitted, the current directory is used.`,
 	pf.StringVar(&opts.style, "style", "", "commit style: conventional|freeform|custom")
 	pf.StringVar(&opts.customTemplate, "custom-template", "", "path to a custom commit template (style=custom)")
 	pf.BoolVar(&opts.force, "force", false, "overwrite an existing .got/config.yaml")
-	pf.BoolVar(&opts.noInteractive, "no-interactive", true, "use defaults instead of prompting (always true in v0.1)")
+	pf.BoolVar(&opts.noInteractive, "no-interactive", false, "use defaults instead of prompting (alias for --no-tui)")
 
 	return cmd
 }
 
-// runInit performs the full init flow. It is split out from the cobra
-// handler so it can be exercised from tests without going through the
-// command tree.
+// runInit performs the full init flow: discover, ask (wizard or
+// defaults), then write. It is split out from the cobra handler so
+// it can be exercised from tests without going through the command
+// tree.
 func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
-	out := cmd.OutOrStdout()
-	if deps.Stdout != nil {
-		out = deps.Stdout
-	}
-
-	// 1. Resolve target. --here is the same as no path; path arg wins
-	//    over --here if both are set.
+	// 1. Resolve target. --here is the same as no path; path arg
+	//    wins over --here if both are set.
 	target := opts.target
 	if target == "" || opts.here {
 		target = "."
@@ -101,24 +109,22 @@ func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
 	}
 
 	// If the user passed an explicit path that is not the resolved
-	// work tree (i.e. they asked to init some other work tree), bail.
-	// The spec says `got init` is "from inside a Git repo"; we don't
-	// want to init a child of a git repo against the parent's config.
+	// work tree, bail. The spec says `got init` is "from inside a
+	// Git repo"; we don't want to init a child of a git repo
+	// against the parent's config.
 	if opts.target != "" && !opts.here && abs != workTree {
 		return gerr.Validation(
 			fmt.Sprintf("path %q resolves to work tree %q; pass the work tree root, not a subdirectory", abs, workTree),
 		)
 	}
 
-	paths := repo.NewPaths(workTree)
-
 	// 3. Refuse if .got/ already has the pieces we'd write, unless
-	//    --force is set. We check got.yml and the DB file.
+	//    --force is set.
 	exists, err := config.FileExists(filepath.Join(workTree, "got.yml"))
 	if err != nil {
 		return err
 	}
-	dbExists, err := config.FileExists(paths.DBFile)
+	dbExists, err := config.FileExists(filepath.Join(workTree, ".got", "got.db"))
 	if err != nil {
 		return err
 	}
@@ -128,64 +134,104 @@ func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
 		)
 	}
 
-	// 4. Build the project config from flags + detected values.
-	cfg := config.DefaultProjectConfig()
-	if opts.name != "" {
-		cfg.Project.Name = opts.name
-	} else {
-		cfg.Project.Name = filepath.Base(workTree)
+	// 4. Build Answers — either by running the wizard, or by
+	//    composing flags + detected defaults. Both paths produce
+	//    the same struct so the apply step is identical.
+	detected := initwiz.Detect(workTree)
+	pre := initwiz.PrePopulated{
+		Name:           opts.name,
+		DefaultBranch:  opts.branch,
+		CommitStyle:    opts.style,
+		CustomTemplate: opts.customTemplate,
 	}
-	if opts.branch != "" {
-		cfg.Project.DefaultBranch = opts.branch
-	}
-	if opts.style != "" {
-		if err := config.ValidateCommitStyle(opts.style); err != nil {
-			return gerr.Validation(err.Error())
-		}
-		cfg.Commits.Style = opts.style
-	}
-	if opts.customTemplate != "" {
-		cfg.Commits.CustomTemplate = opts.customTemplate
-	}
-	if opts.style == "" && opts.customTemplate != "" {
-		// User supplied --custom-template without --style=custom; default
-		// the style to custom.
-		cfg.Commits.Style = "custom"
+	answers, err := resolveAnswers(deps, opts, detected, pre)
+	if err != nil {
+		return err
 	}
 
-	// 5. Build the internal config from the GOT version. NewRootCmd
-	// always fills Deps.GotVersion from version.String() when empty,
-	// so this is never blank in production; the nil-guard exists
-	// purely to keep runInit safe to call directly from tests.
+	return applyInit(deps, workTree, answers, opts.force)
+}
+
+// resolveAnswers picks the wizard or the non-interactive defaults
+// path based on the flags and the TTY status. Both paths return the
+// same initwiz.Answers struct.
+func resolveAnswers(deps Deps, opts *initOptions, detected initwiz.Detected, pre initwiz.PrePopulated) (initwiz.Answers, error) {
+	useWizard := !opts.noTUI && !opts.noInteractive
+	if useWizard && deps.IsTerminal != nil && !deps.IsTerminal() {
+		useWizard = false
+	}
+	if useWizard {
+		if deps.RunWizard == nil {
+			// Defensive: a stub Deps without RunWizard still works.
+			useWizard = false
+		}
+	}
+	if !useWizard {
+		// Non-interactive: build answers from flags + defaults.
+		a := initwiz.Defaults(detected)
+		if pre.Name != "" {
+			a.Name = pre.Name
+		}
+		if pre.DefaultBranch != "" {
+			a.DefaultBranch = pre.DefaultBranch
+		}
+		if pre.CommitStyle != "" {
+			if err := config.ValidateCommitStyle(pre.CommitStyle); err != nil {
+				return initwiz.Answers{}, gerr.Validation(err.Error())
+			}
+			a.CommitStyle = pre.CommitStyle
+		}
+		if pre.CustomTemplate != "" {
+			a.CustomTemplate = pre.CustomTemplate
+			// Custom template without an explicit --style implies custom.
+			if pre.CommitStyle == "" {
+				a.CommitStyle = "custom"
+			}
+		}
+		return a, nil
+	}
+	return deps.RunWizard(detected, pre, tui.NewTheme())
+}
+
+// applyInit writes the .got/ tree, configs, gitignore entry, and
+// primes the SQLite meta. It is the shared tail of the wizard and
+// non-interactive paths.
+func applyInit(deps Deps, workTree string, a initwiz.Answers, force bool) error {
+	paths := repo.NewPaths(workTree)
+
+	// Build the project + internal configs.
+	cfg := config.DefaultProjectConfig()
+	cfg.Project.Name = a.Name
+	cfg.Project.DefaultBranch = a.DefaultBranch
+	cfg.Commits.Style = a.CommitStyle
+	cfg.Commits.CustomTemplate = a.CustomTemplate
+	cfg.Plugins.Enabled = a.Plugins
+
 	gotVersion := deps.GotVersion
 	if gotVersion == "" {
 		gotVersion = "dev"
 	}
 	internalCfg := config.DefaultInternalConfig(gotVersion)
 
-	// 6. Create .got/ tree.
+	out := deps.Stdout
+
+	// 1. Create .got/ tree.
 	if err := paths.EnsureGOTDir(); err != nil {
 		return err
 	}
-
-	// 7. Write .got/config.yaml. The spec (§7 step 4) lists this
-	//    before got.yml, so we follow that order.
+	// 2. .got/config.yaml.
 	if err := config.WriteInternalConfig(paths.ConfigFile, internalCfg); err != nil {
 		return gerr.Wrap(gerr.CodeGeneric, err, "writing .got/config.yaml")
 	}
-
-	// 8. Write got.yml.
+	// 3. got.yml.
 	if err := config.WriteProjectConfig(filepath.Join(workTree, "got.yml"), cfg); err != nil {
 		return gerr.Wrap(gerr.CodeGeneric, err, "writing got.yml")
 	}
-
-	// 9. Append .got/ to .gitignore (idempotent).
+	// 4. .gitignore.
 	if err := paths.EnsureGitignoreEntry(); err != nil {
 		return err
 	}
-
-	// 10. Open the SQLite store and run migrations. The store creates
-	//     the file on first open and runs all pending migrations.
+	// 5. SQLite store + migrations.
 	if deps.StoreFor == nil {
 		return gerr.Validation("internal: Deps.StoreFor is nil")
 	}
@@ -195,8 +241,7 @@ func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
 	}
 	defer func() { _ = st.Close() }()
 
-	// 11. Prime init meta. --force bumps init_at; without --force we
-	//     leave any pre-existing init_at in place.
+	// 6. Prime init meta.
 	nowFn := deps.Now
 	if nowFn == nil {
 		nowFn = timeNow
@@ -205,20 +250,15 @@ func runInit(cmd *cobra.Command, deps Deps, opts *initOptions) error {
 	if userFn == nil {
 		userFn = osUser
 	}
-	if err := st.TouchInitMeta(gotVersion, userFn(), nowFn(), opts.force); err != nil {
+	if err := st.TouchInitMeta(gotVersion, userFn(), nowFn(), force); err != nil {
 		return err
 	}
 
-	// 12. Friendly success message.
+	// 7. Friendly success message.
 	fmt.Fprintf(out, "Initialized GOT in %s\n", workTree)
-	fmt.Fprintf(out, "  - %s\n", filepath.Join(workTree, "got.yml"))
 	fmt.Fprintf(out, "  - %s\n", paths.ConfigFile)
+	fmt.Fprintf(out, "  - %s\n", filepath.Join(workTree, "got.yml"))
 	fmt.Fprintf(out, "  - %s\n", paths.DBFile)
 	fmt.Fprintln(out, "Next: try `got status`.")
 	return nil
 }
-
-// timeNow is the time-source used when Deps.Now is nil. It is a
-// package-level variable (not a constant) so tests can override it via
-// the Deps plumbing. Declared in its own file to keep init.go focused
-// on the cobra command.

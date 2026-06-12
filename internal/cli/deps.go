@@ -6,8 +6,10 @@ import (
 	"time"
 
 	"github.com/got-sh/got/internal/git"
+	"github.com/got-sh/got/internal/initwiz"
 	"github.com/got-sh/got/internal/repo"
 	"github.com/got-sh/got/internal/store"
+	"github.com/got-sh/got/internal/tui"
 )
 
 // Deps bundles the runtime dependencies the CLI needs. Tests pass a
@@ -23,6 +25,13 @@ type Deps struct {
 	// StoreFor returns an open store.Store for the given .got/ DB path.
 	// It is responsible for running migrations on Open.
 	StoreFor func(dbPath string) (*store.Store, error)
+	// RunWizard starts the interactive init wizard and blocks until
+	// the user confirms or cancels. Tests stub this to return canned
+	// Answers without a real terminal.
+	RunWizard func(detected initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error)
+	// IsTerminal reports whether stdout is a TTY. When false, the
+	// init command skips the wizard and uses defaults from flags.
+	IsTerminal func() bool
 	// Now returns the current time. Tests override this so they can
 	// assert on timestamps without sleeping.
 	Now func() time.Time
@@ -47,9 +56,13 @@ func defaultDeps() Deps {
 		},
 		Discover: repo.Discover,
 		StoreFor: store.Open,
-		Now:      time.Now,
-		User:     osUser,
-		Stdout:   os.Stdout,
-		Stderr:   os.Stderr,
+		RunWizard: func(d initwiz.Detected, pre initwiz.PrePopulated, theme tui.Theme) (initwiz.Answers, error) {
+			return initwiz.Run(d, pre, theme)
+		},
+		IsTerminal: defaultIsTerminal,
+		Now:        time.Now,
+		User:       osUser,
+		Stdout:     os.Stdout,
+		Stderr:     os.Stderr,
 	}
 }
