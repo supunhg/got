@@ -55,10 +55,12 @@ Flags:
 // the test suite. It is split out so tests can call it directly without
 // the cobra flag-parsing layer.
 func runStatus(cmd *cobra.Command, deps Deps, args []string, opts *statusOptions) error {
+	logger := loggerFor(deps)
 	start := "."
 	if len(args) > 0 {
 		start = args[0]
 	}
+	logger.Info("status starting", "start", start, "json", opts.asJSON, "short", opts.asShort)
 	workTree, err := deps.Discover(start)
 	if err != nil {
 		return err
@@ -66,12 +68,14 @@ func runStatus(cmd *cobra.Command, deps Deps, args []string, opts *statusOptions
 	a := deps.AdapterFor(workTree)
 	gitStatus, err := a.Status(cmd.Context())
 	if err != nil {
+		logger.Warn("status failed", "err", err.Error())
 		return err
 	}
 	out := cmd.OutOrStdout()
 	if out == nil {
 		out = deps.Stdout
 	}
+	logger.Info("status finished", "branch", gitStatus.Branch, "entries", len(gitStatus.Entries))
 	switch {
 	case opts.asJSON:
 		return writeStatusJSON(out, deps, workTree, gitStatus)

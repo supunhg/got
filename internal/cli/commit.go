@@ -80,6 +80,7 @@ Flags skip the wizard:
 // runCommit is the cobra handler body. It is split out from newCommitCmd
 // so tests can call it via a constructed cobra command.
 func runCommit(cmd *cobra.Command, deps Deps, opts *commitOptions) error {
+	logger := loggerFor(deps)
 	// --no-tui is a global flag (persistent on the root); read it
 	// the same way init does so it works in tests that bypass
 	// cobra's flag inheritance.
@@ -87,6 +88,7 @@ func runCommit(cmd *cobra.Command, deps Deps, opts *commitOptions) error {
 		opts.noTUI = v
 	}
 
+	logger.Info("commit starting", "all", opts.all, "amend", opts.amend, "noVerify", opts.noVerify, "message", opts.message != "")
 	start := "."
 	workTree, err := deps.Discover(start)
 	if err != nil {
@@ -111,10 +113,16 @@ func runCommit(cmd *cobra.Command, deps Deps, opts *commitOptions) error {
 	}
 	answers, err := resolveCommitAnswers(cmd, deps, a, workTree, opts, allowBreaking, allowedScopes)
 	if err != nil {
+		logger.Warn("commit answers resolution failed", "err", err.Error())
 		return err
 	}
 
-	return applyCommit(cmd.Context(), a, answers, opts, out)
+	if err := applyCommit(cmd.Context(), a, answers, opts, out); err != nil {
+		logger.Warn("commit failed", "err", err.Error())
+		return err
+	}
+	logger.Info("commit finished", "type", answers.Type, "scope", answers.Scope)
+	return nil
 }
 
 // resolveCommitAnswers picks the wizard or the non-interactive path.

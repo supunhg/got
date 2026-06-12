@@ -363,14 +363,10 @@ func runRemotePush(cmd *cobra.Command, deps Deps, name, branch string, force, fo
 	return nil
 }
 
-// remoteLogger returns deps.Logger or a discard fallback so remote
-// commands don't need to nil-check the logger at every call site.
-func remoteLogger(d Deps) *slog.Logger {
-	if d.Logger != nil {
-		return d.Logger
-	}
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+// remoteLogger is an alias for the shared loggerFor helper, kept
+// as a named call site so the remote subcommand tree reads
+// consistently. New code should use loggerFor directly.
+func remoteLogger(d Deps) *slog.Logger { return loggerFor(d) }
 
 // wrapPushError annotates a non-fast-forward push error with guidance
 // to re-run with --force-with-lease, per spec §10. We detect NFF by

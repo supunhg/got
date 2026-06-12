@@ -14,14 +14,10 @@ import (
 	"github.com/got-sh/got/internal/repo"
 )
 
-// pluginLogger returns deps.Logger or a no-op fallback. Centralized
-// so plugin commands don't have to nil-check at every call site.
-func pluginLogger(d Deps) *slog.Logger {
-	if d.Logger != nil {
-		return d.Logger
-	}
-	return slog.New(slog.NewTextHandler(io.Discard, nil))
-}
+// pluginLogger is an alias for the shared loggerFor helper, kept
+// as a named call site so the plugin subcommand tree reads
+// consistently. New code should use loggerFor directly.
+func pluginLogger(d Deps) *slog.Logger { return loggerFor(d) }
 
 // newPluginCmd builds the `got plugin` subcommand tree per spec §11.
 //

@@ -7,6 +7,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,6 +17,17 @@ import (
 	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/version"
 )
+
+// loggerFor returns deps.Logger or a no-op fallback. Centralized so
+// command files don't have to nil-check the logger at every call
+// site and so all commands behave consistently when Logger is
+// unset (tests, TUI subcommands, plugin stubs).
+func loggerFor(d Deps) *slog.Logger {
+	if d.Logger != nil {
+		return d.Logger
+	}
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
 
 // NewRootCmd builds the root `got` command with all persistent flags and
 // the v0.1 subcommand stubs. It is exposed for tests that want to drive

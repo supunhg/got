@@ -141,6 +141,8 @@ func runBranchRoot(cmd *cobra.Command, deps Deps, all, remotes, asJSON bool) err
 
 // runBranchList lists branches and renders them as a table or JSON.
 func runBranchList(cmd *cobra.Command, deps Deps, all, remotes, asJSON bool) error {
+	logger := loggerFor(deps)
+	logger.Info("branch list starting", "all", all, "remotes", remotes, "json", asJSON)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
@@ -148,15 +150,18 @@ func runBranchList(cmd *cobra.Command, deps Deps, all, remotes, asJSON bool) err
 	a := deps.AdapterFor(workTree)
 	branches, err := a.Branches(cmd.Context())
 	if err != nil {
+		logger.Warn("branch list failed", "err", err.Error())
 		return err
 	}
 	if remotes || all {
 		remote, err := a.RemoteBranches(cmd.Context())
 		if err != nil {
+			logger.Warn("branch list remote lookup failed", "err", err.Error())
 			return err
 		}
 		branches = append(branches, remote...)
 	}
+	logger.Info("branch list finished", "count", len(branches))
 	out := cmd.OutOrStdout()
 	if out == nil {
 		out = deps.Stdout
@@ -170,28 +175,36 @@ func runBranchList(cmd *cobra.Command, deps Deps, all, remotes, asJSON bool) err
 // runBranchCreate creates a new branch at the named start point.
 // Does NOT check the branch out.
 func runBranchCreate(ctx context.Context, deps Deps, name, from string) error {
+	logger := loggerFor(deps)
+	logger.Info("branch create starting", "name", name, "from", from)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.CreateBranch(ctx, name, from); err != nil {
+		logger.Warn("branch create failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("branch create finished", "name", name)
 	_, _ = fmt.Fprintf(deps.Stdout, "[got] created branch %q\n", name)
 	return nil
 }
 
 // runBranchCheckout switches the working tree to the named branch.
 func runBranchCheckout(ctx context.Context, deps Deps, name string) error {
+	logger := loggerFor(deps)
+	logger.Info("branch checkout starting", "name", name)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
 	}
 	a := deps.AdapterFor(workTree)
 	if err := a.Checkout(ctx, name, git.CheckoutOpts{}); err != nil {
+		logger.Warn("branch checkout failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("branch checkout finished", "name", name)
 	_, _ = fmt.Fprintf(deps.Stdout, "[got] switched to branch %q\n", name)
 	return nil
 }
@@ -200,6 +213,8 @@ func runBranchCheckout(ctx context.Context, deps Deps, name string) error {
 // current branch. With force=true, uses `git branch -D` (unmerged
 // work is lost).
 func runBranchDelete(ctx context.Context, deps Deps, name string, force bool) error {
+	logger := loggerFor(deps)
+	logger.Info("branch delete starting", "name", name, "force", force)
 	workTree, err := deps.Discover(".")
 	if err != nil {
 		return err
@@ -207,16 +222,20 @@ func runBranchDelete(ctx context.Context, deps Deps, name string, force bool) er
 	a := deps.AdapterFor(workTree)
 	branches, err := a.Branches(ctx)
 	if err != nil {
+		logger.Warn("branch lookup failed", "err", err.Error())
 		return err
 	}
 	for _, b := range branches {
 		if b.Name == name && b.IsCurrent {
+			logger.Warn("branch delete refused: current branch", "name", name)
 			return gerr.Validation(fmt.Sprintf("cannot delete the branch you are currently on (%q); switch to another branch first", name))
 		}
 	}
 	if err := a.DeleteBranch(ctx, name, force); err != nil {
+		logger.Warn("branch delete failed", "name", name, "err", err.Error())
 		return err
 	}
+	logger.Info("branch delete finished", "name", name, "force", force)
 	if force {
 		_, _ = fmt.Fprintf(deps.Stdout, "[got] force-deleted branch %q\n", name)
 	} else {
