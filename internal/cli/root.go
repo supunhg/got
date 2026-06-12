@@ -7,10 +7,12 @@ package cli
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/got-sh/got/internal/gerr"
 	"github.com/got-sh/got/internal/version"
 )
 
@@ -132,8 +134,89 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 // the single entry point used by cmd/got/main.go. Errors are written
 // to stderr via gerr.UserMessage and the exit code is set per
 // got-spec.md §15.
+//
+// Cobra's command tree returns pflag errors (unknown flag, bad flag
+// value, etc.) as plain *flag.Error values, which gerr.ExitCode would
+// map to CodeGeneric (1). For spec §15 compliance, those are usage
+// errors and should map to CodeUsage (2): we wrap them here so the
+// exit code is right. Any other non-gerr error is wrapped as a
+// generic gerr.Error so the main entry point can rely on errors.As.
 func Execute() error {
-	return NewRootCmd(defaultDeps()).Execute()
+	err := NewRootCmd(defaultDeps()).Execute()
+	return wrapExecuteError(err)
+}
+
+// wrapExecuteError maps Cobra's low-level flag errors to typed gerr
+// values so the exit-code scheme in spec §15 fires correctly. It is
+// split out from Execute so tests can exercise the mapping directly.
+//
+// Implementation note: Cobra does not export stable sentinels for the
+// "you typed the wrong thing" cases (unknown subcommand, unknown
+// flag, bad arg, etc.) — some are *pflag.Error (unexported type in
+// some versions), some are cobra.Err*, some are plain fmt.Errorf.
+// We use stable string prefixes on the error message instead. The
+// strings come from Cobra's own user-facing templates in command.go
+// and have been stable since Cobra v1.0.
+func wrapExecuteError(err error) error {
+	if err == nil {
+		return nil
+	}
+	// Already a typed gerr error: pass through unchanged so
+	// errors.As, errors.Is, and the original Code/Hint/Cause are
+	// preserved.
+	if _, ok := err.(*gerr.Error); ok {
+		return err
+	}
+	// Cobra prints help itself when --help / -h is passed; the
+	// returned error is the cobra.ErrHelp sentinel (or a
+	// fmt.Errorf wrapping it). Either way, no error to surface.
+	if strings.Contains(err.Error(), "help requested") {
+		return nil
+	}
+	if isCobraUsageError(err) {
+		return gerr.Usage(err.Error())
+	}
+	// Anything else: return as-is. gerr.ExitCode falls back to
+	// CodeGeneric (1) for non-*gerr.Error values, and
+	// gerr.UserMessage falls back to err.Error(). Wrapping with
+	// gerr.Wrap(CodeGeneric, err, err.Error()) would render as
+	// "msg: msg" because gerr.Error.Error() stringifies both the
+	// Message and the Cause; passing through unchanged is
+	// strictly cleaner.
+	return err
+}
+
+// isCobraUsageError returns true for errors that Cobra produces for
+// bad CLI input. These are the "you typed the wrong thing" cases
+// that spec §15 wants to map to CodeUsage (2). The strings are
+// stable across Cobra versions because they originate from the
+// user-facing templates in command.go and pflag's error helpers.
+func isCobraUsageError(err error) bool {
+	msg := err.Error()
+	switch {
+	case strings.HasPrefix(msg, "unknown command "):
+		// Cobra v1.6+: "unknown command %q for %q"
+		return true
+	case strings.HasPrefix(msg, "unknown flag: "):
+		// pflag: bad --foo
+		return true
+	case strings.HasPrefix(msg, "invalid argument "):
+		// pflag: bad value for a flag
+		return true
+	case strings.HasPrefix(msg, "bad flag syntax: "):
+		// pflag: malformed -foo=bar
+		return true
+	case strings.HasPrefix(msg, "flag needs an argument: "):
+		// pflag: --foo with no value
+		return true
+	case strings.HasPrefix(msg, "invalid value "):
+		// pflag: --foo=badvalue
+		return true
+	case strings.HasPrefix(msg, "required flag(s) "):
+		// pflag: missing required flag
+		return true
+	}
+	return false
 }
 
 // newVersionCmd returns the `got version` subcommand. It prints the same

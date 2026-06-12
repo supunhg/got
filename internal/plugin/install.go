@@ -118,6 +118,12 @@ func (i *Installer) InstallFromPath(srcPath string) (InstallResult, error) {
 	}
 	info, err := os.Stat(srcPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return InstallResult{}, gerr.Validation(fmt.Sprintf("plugin: install source %s does not exist", srcPath))
+		}
+		if os.IsPermission(err) {
+			return InstallResult{}, gerr.PermissionDenied(srcPath)
+		}
 		return InstallResult{}, gerr.Wrap(gerr.CodeGeneric, err, fmt.Sprintf("stat %s", srcPath))
 	}
 	if info.IsDir() {
@@ -146,10 +152,16 @@ func (i *Installer) InstallFromPath(srcPath string) (InstallResult, error) {
 			return InstallResult{}, gerr.Validation(fmt.Sprintf("plugin: %s already exists in .got/plugins/ (use --force to overwrite)", destName))
 		}
 	} else if !os.IsNotExist(err) {
+		if os.IsPermission(err) {
+			return InstallResult{}, gerr.PermissionDenied(dest)
+		}
 		return InstallResult{}, gerr.Wrap(gerr.CodeGeneric, err, fmt.Sprintf("stat %s", dest))
 	}
 
 	if err := os.MkdirAll(i.RepoPluginsDir, 0o755); err != nil {
+		if os.IsPermission(err) {
+			return InstallResult{}, gerr.PermissionDenied(i.RepoPluginsDir)
+		}
 		return InstallResult{}, gerr.Wrap(gerr.CodeGeneric, err, fmt.Sprintf("mkdir %s", i.RepoPluginsDir))
 	}
 	if err := copyFile(srcPath, dest, 0o755); err != nil {
@@ -209,6 +221,9 @@ func (i *Installer) InstallFromGit(gitURL string) (InstallResult, error) {
 
 	tmp, err := os.MkdirTemp("", "got-plugin-clone-")
 	if err != nil {
+		if os.IsPermission(err) {
+			return InstallResult{}, gerr.PermissionDenied(os.TempDir())
+		}
 		return InstallResult{}, gerr.Wrap(gerr.CodeGeneric, err, "create temp dir")
 	}
 	defer func() { _ = os.RemoveAll(tmp) }()
@@ -338,23 +353,35 @@ func probeManifest(path string, timeout time.Duration) (Manifest, error) {
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return Manifest{}, gerr.Wrap(gerr.CodePlugin, err, fmt.Sprintf("plugin %s: --got-plugin-manifest failed", path))
+		return Manifest{}, gerr.PluginError("", err, fmt.Sprintf("--got-plugin-manifest failed for %s", path))
 	}
 	m, err := ParseManifest(stdout.Bytes())
 	if err != nil {
-		return Manifest{}, gerr.Wrap(gerr.CodePlugin, err, fmt.Sprintf("plugin %s: invalid manifest", path))
+		return Manifest{}, gerr.PluginError("", err, fmt.Sprintf("invalid manifest from %s", path))
 	}
 	return m, nil
 }
 
 // copyFile copies src to dst with the given mode. It does not
 // preserve extended attributes; that is fine for plugin binaries.
+// On permission errors it returns *gerr.Error with the dst path
+// included so the CLI can surface a precise "permission denied"
+// message and a hint at the fix.
 func copyFile(src, dst string, mode os.FileMode) error {
 	body, err := os.ReadFile(src)
 	if err != nil {
+		if os.IsPermission(err) {
+			return gerr.PermissionDenied(src)
+		}
 		return err
 	}
-	return os.WriteFile(dst, body, mode)
+	if err := os.WriteFile(dst, body, mode); err != nil {
+		if os.IsPermission(err) {
+			return gerr.PermissionDenied(dst)
+		}
+		return err
+	}
+	return nil
 }
 
 // LooksLikeGitURL does a tiny syntactic check so callers can fail
