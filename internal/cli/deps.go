@@ -11,9 +11,11 @@ import (
 	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/graphwiz"
 	"github.com/got-sh/got/internal/initwiz"
+	"github.com/got-sh/got/internal/plugin"
 	"github.com/got-sh/got/internal/repo"
 	"github.com/got-sh/got/internal/store"
 	"github.com/got-sh/got/internal/tui"
+	"github.com/got-sh/got/internal/version"
 )
 
 // Deps bundles the runtime dependencies the CLI needs. Tests pass a
@@ -45,6 +47,13 @@ type Deps struct {
 	// blocks until the user quits. Tests stub this to skip the real
 	// Bubbletea program; production delegates to graphwiz.Run.
 	RunGraphWizard func(ctx context.Context, content string, theme tui.Theme) error
+	// DiscoverPlugins runs the plugin discovery pipeline (spec §11)
+	// and returns the list of valid plugins. Tests stub this to
+	// return canned results without scanning $PATH or .got/plugins/.
+	// When nil, auto-registration of `got <name> <command>` is
+	// skipped entirely (so tests that don't set it don't pay the
+	// discovery cost).
+	DiscoverPlugins func(ctx context.Context) ([]plugin.DiscoveredPlugin, error)
 	// IsTerminal reports whether stdout is a TTY. When false, the
 	// init command skips the wizard and uses defaults from flags.
 	IsTerminal func() bool
@@ -83,6 +92,15 @@ func defaultDeps() Deps {
 		},
 		RunGraphWizard: func(ctx context.Context, content string, theme tui.Theme) error {
 			return graphwiz.Run(ctx, content, theme)
+		},
+		DiscoverPlugins: func(ctx context.Context) ([]plugin.DiscoveredPlugin, error) {
+			d := &plugin.Discoverer{
+				RunningVersion: version.Version,
+			}
+			if workTree, err := repo.Discover("."); err == nil {
+				d.RepoPluginsDir = workTree + "/.got/plugins"
+			}
+			return d.Discover(ctx)
 		},
 		IsTerminal: defaultIsTerminal,
 		Now:        time.Now,
