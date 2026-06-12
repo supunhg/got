@@ -49,19 +49,29 @@ func main() {
 // in append mode, 0600 perms) in addition to w. The file is closed
 // when the process exits; partial writes are acceptable per spec
 // §16 (the log is best-effort).
+//
+// When --log-max-size is also set (in megabytes, > 0), the file
+// writer rotates the file when its size exceeds the threshold:
+// the existing file is renamed to <log-file>.1 (overwriting any
+// previous .1) and a fresh file is opened. Only one backup is
+// kept; the v0.1 policy is "what just happened" rather than
+// long-term retention. A max size of 0 (the default) disables
+// rotation, matching the pre-rotation behavior.
 func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
 	fs := flag.NewFlagSet("got-log-init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		level   string
-		format  = gotlog.FormatText
-		noTUI   bool
-		logFile string
+		level      string
+		format     = gotlog.FormatText
+		noTUI      bool
+		logFile    string
+		logMaxSize int64
 	)
 	fs.StringVar(&level, "log-level", "", "log level: debug|info|warn|error")
 	fs.StringVar(&format, "log-format", gotlog.FormatText, "log output format: text|json")
 	fs.BoolVar(&noTUI, "no-tui", false, "force plain CLI output even in wizards")
 	fs.StringVar(&logFile, "log-file", "", "also append every log record to this file (created if missing)")
+	fs.Int64Var(&logMaxSize, "log-max-size", 0, "rotate --log-file when it exceeds this many megabytes (0 disables)")
 	_ = fs.Parse(args)
 
 	mode := gotlog.ModeInteractive
@@ -73,7 +83,13 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, error) {
 	}
 	writers := []io.Writer{w}
 	if logFile != "" {
-		f, ferr := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		var f io.Writer
+		var ferr error
+		if logMaxSize > 0 {
+			f, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024)
+		} else {
+			f, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		}
 		if ferr != nil {
 			return nil, fmt.Errorf("log: open --log-file %q: %w", logFile, ferr)
 		}
