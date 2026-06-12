@@ -117,7 +117,8 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.Bool("no-tui", false, "force plain CLI output even in wizards (CI-friendly)")
 	pf.String("log-level", "warn", "log level: debug|info|warn|error (overrides the spec §16 default)")
 	pf.String("log-format", "text", "log output format: text|json")
-	pf.String("log-file", "", "also append every log record to this file (created if missing, 0600 perms)")
+	pf.String("log-file", "", "also append every log record to this file (created if missing)")
+	pf.String("log-file-mode", "0600", "permissions for --log-file (octal, e.g. 0600, 0640)")
 	pf.Int64("log-max-size", 0, "rotate --log-file when it exceeds this many megabytes (0 disables)")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
 

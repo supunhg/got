@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strconv"
 
 	flag "github.com/spf13/pflag"
 
@@ -76,9 +77,9 @@ func run() int {
 // cobra with the proper usage text.
 //
 // When --log-file is set, the logger is teed to that file (created
-// in append mode, 0600 perms) in addition to w. The file is closed
-// when the process exits; partial writes are acceptable per spec
-// §16 (the log is best-effort).
+// in append mode, perms from --log-file-mode) in addition to w.
+// The file is closed when the process exits; partial writes are
+// acceptable per spec §16 (the log is best-effort).
 //
 // When --log-max-size is also set (in megabytes, > 0), the file
 // writer rotates the file when its size exceeds the threshold:
@@ -86,7 +87,8 @@ func run() int {
 // previous .1) and a fresh file is opened. Only one backup is
 // kept; the v0.1 policy is "what just happened" rather than
 // long-term retention. A max size of 0 (the default) disables
-// rotation, matching the pre-rotation behavior.
+// rotation, matching the pre-rotation behavior. The fresh file
+// is created with the same --log-file-mode perms.
 //
 // The file writer is wrapped in a *CountingWriter so the returned
 // SessionLog can report how many records were written to the file
@@ -100,18 +102,31 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, 
 	fs := flag.NewFlagSet("got-log-init", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	var (
-		level      string
-		format     = gotlog.FormatText
-		noTUI      bool
-		logFile    string
-		logMaxSize int64
+		level       string
+		format      = gotlog.FormatText
+		noTUI       bool
+		logFile     string
+		logMaxSize  int64
+		logFileMode string
 	)
 	fs.StringVar(&level, "log-level", "", "log level: debug|info|warn|error")
 	fs.StringVar(&format, "log-format", gotlog.FormatText, "log output format: text|json")
 	fs.BoolVar(&noTUI, "no-tui", false, "force plain CLI output even in wizards")
 	fs.StringVar(&logFile, "log-file", "", "also append every log record to this file (created if missing)")
 	fs.Int64Var(&logMaxSize, "log-max-size", 0, "rotate --log-file when it exceeds this many megabytes (0 disables)")
+	fs.StringVar(&logFileMode, "log-file-mode", "0600", "permissions for --log-file (octal, e.g. 0600, 0640)")
 	_ = fs.Parse(args)
+
+	// Parse --log-file-mode as octal. Using base 8 (not 0) so
+	// "0600" works but "384" is rejected as not-a-valid-octal:
+	// users who want decimal can write "0o600" or convert.
+	// The string is captured here (not in the pflag Var) so a
+	// bad value doesn't surface twice; cobra will re-parse
+	// the flag and surface the error with proper usage.
+	modeUint, modeErr := strconv.ParseUint(logFileMode, 8, 32)
+	if modeErr != nil {
+		return nil, nil, fmt.Errorf("log: invalid --log-file-mode %q (want octal, e.g. 0600, 0640): %w", logFileMode, modeErr)
+	}
 
 	mode := gotlog.ModeInteractive
 	if noTUI {
@@ -123,15 +138,20 @@ func buildLogger(args []string, w io.Writer) (*slog.Logger, *gotlog.SessionLog, 
 	writers := []io.Writer{w}
 	var sessionLog *gotlog.SessionLog
 	if logFile != "" {
+		// --log-file-mode was validated above; cast the parsed
+		// uint32 to os.FileMode here. OpenRotatingFile masks
+		// to the lower 9 bits; we do the same for the
+		// non-rotating path to keep behavior consistent.
+		fileMode := os.FileMode(modeUint) & 0o777
 		var fileWriter io.Writer
 		var rotator *gotlog.RotatingFile
 		var plainFile *os.File
 		var ferr error
 		if logMaxSize > 0 {
-			rotator, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024)
+			rotator, ferr = gotlog.OpenRotatingFile(logFile, logMaxSize*1024*1024, fileMode)
 			fileWriter = rotator
 		} else {
-			plainFile, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+			plainFile, ferr = os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, fileMode)
 			fileWriter = plainFile
 		}
 		if ferr != nil {

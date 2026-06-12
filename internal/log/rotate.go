@@ -27,6 +27,7 @@ import (
 type RotatingFile struct {
 	path      string
 	maxBytes  int64
+	mode      os.FileMode
 	mu        sync.Mutex
 	f         *os.File
 	bytes     int64
@@ -40,9 +41,14 @@ type RotatingFile struct {
 // enables rotation; the file is rotated before any write that
 // would push its size past the threshold.
 //
-// The file is created with mode 0600 (user-only read/write) so
-// the log file is not world-readable, matching the --log-file
-// perms set by cmd/got/main.go for the non-rotating path.
+// mode is the file permission bits used when the file is
+// created (and after each rotation). The lower 9 bits are the
+// standard rwx bits; the upper bits (setuid/setgid/sticky) are
+// ignored. Typical values are 0o600 (user-only) and 0o640
+// (user + group). The caller is expected to have validated the
+// mode already; OpenRotatingFile does not enforce a minimum
+// (e.g. 0 would create an unreadable file, which is the
+// caller's responsibility to avoid).
 //
 // The returned RotatingFile holds an open file descriptor. The
 // caller must call Close to release it. For short-lived CLI
@@ -51,14 +57,18 @@ type RotatingFile struct {
 // intentionally not close it and let the process exit clean it
 // up. Close is still exposed for tests and for callers that want
 // the explicit lifecycle.
-func OpenRotatingFile(path string, maxBytes int64) (*RotatingFile, error) {
+func OpenRotatingFile(path string, maxBytes int64, mode os.FileMode) (*RotatingFile, error) {
 	if path == "" {
 		return nil, fmt.Errorf("log: RotatingFile path must not be empty")
 	}
 	if maxBytes < 0 {
 		return nil, fmt.Errorf("log: RotatingFile maxBytes must be >= 0 (got %d)", maxBytes)
 	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	// Mask to the 9 standard permission bits. setuid/setgid/
+	// sticky don't make sense for a log file and we don't
+	// want a CLI flag typo to silently create a setuid log.
+	mode = mode & 0o777
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, mode)
 	if err != nil {
 		return nil, fmt.Errorf("log: open rotating file %q: %w", path, err)
 	}
@@ -70,6 +80,7 @@ func OpenRotatingFile(path string, maxBytes int64) (*RotatingFile, error) {
 	return &RotatingFile{
 		path:     path,
 		maxBytes: maxBytes,
+		mode:     mode,
 		f:        f,
 		bytes:    info.Size(),
 	}, nil
@@ -171,7 +182,9 @@ func (r *RotatingFile) Rotations() int64 {
 // rotateLocked performs the rename-and-reopen dance. Caller must
 // hold r.mu. The existing fd is closed, the file is renamed to
 // path+".1" (overwriting any previous .1), and a fresh fd is
-// opened at path.
+// opened at path. The new file is created with the same mode
+// the original was opened with (r.mode), so the user's
+// --log-file-mode setting persists across rotations.
 func (r *RotatingFile) rotateLocked() error {
 	if err := r.f.Close(); err != nil {
 		return fmt.Errorf("log: close before rotate: %w", err)
@@ -184,14 +197,14 @@ func (r *RotatingFile) rotateLocked() error {
 		// If rename fails (e.g. the source doesn't exist for
 		// some reason), try to reopen the original file so the
 		// writer isn't permanently broken.
-		f, openErr := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+		f, openErr := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, r.mode)
 		if openErr != nil {
 			return fmt.Errorf("log: rename %s -> %s failed (%v) and reopen failed (%v)", r.path, backup, err, openErr)
 		}
 		r.f = f
 		return fmt.Errorf("log: rename %s -> %s: %w", r.path, backup, err)
 	}
-	f, err := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	f, err := os.OpenFile(r.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, r.mode)
 	if err != nil {
 		return fmt.Errorf("log: reopen %s after rotate: %w", r.path, err)
 	}
