@@ -45,9 +45,11 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.String("log-level", "warn", "log level: debug|info|warn|error")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
 
-	// Subcommand stubs. Real implementations land in later scaffold steps
-	// (see got-spec.md §24). For step 1 only `version` exists.
+	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newVersionCmd())
+	cmd.AddCommand(newDecisionCmd())
+	cmd.AddCommand(newNoteCmd())
+	cmd.AddCommand(newOnboardCmd())
 
 	return cmd
 }
