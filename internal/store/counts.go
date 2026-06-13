@@ -16,15 +16,28 @@ import (
 // to. A non-zero count for one of those tables means the user has been
 // poking at the DB directly or is running a development build that
 // writes to them.
+//
+// The Workspace* fields reflect the v0.4 Workspace Engine (added in
+// migration 0002). The legacy Workspaces/OpenWorkspaces pair counts the
+// parent `workspaces` table rows; the per-child-table counts
+// (WorkspaceFiles, WorkspaceBranches, WorkspaceDecisions,
+// WorkspaceNotes) are summed across all workspaces and are useful
+// for the `got status` one-liner.
 type Counts struct {
-	Snapshots      int `json:"snapshots"`
-	Decisions      int `json:"decisions"`
-	Workspaces     int `json:"workspaces"`
-	HealthRuns     int `json:"healthRuns"`
-	OpenWorkspaces int `json:"openWorkspaces"`
+	Snapshots          int `json:"snapshots"`
+	Decisions          int `json:"decisions"`
+	Workspaces         int `json:"workspaces"`
+	OpenWorkspaces     int `json:"openWorkspaces"`
+	WorkspaceFiles     int `json:"workspaceFiles"`
+	WorkspaceBranches  int `json:"workspaceBranches"`
+	WorkspaceDecisions int `json:"workspaceDecisions"`
+	WorkspaceNotes     int `json:"workspaceNotes"`
+	HealthRuns         int `json:"healthRuns"`
+	Events             int `json:"events"`
+	WorkspaceCommits   int `json:"workspaceCommits"`
 }
 
-// Counts returns a single snapshot of all row counts. It runs the five
+// Counts returns a single snapshot of all row counts. It runs the
 // COUNT(*) queries in sequence on a single connection — cheap because
 // v0.1's tables are tiny — and returns an aggregate. The return value
 // is suitable for direct inclusion in `got status --json` output.
@@ -40,7 +53,25 @@ func (s *Store) Counts() (Counts, error) {
 	if c.Workspaces, c.OpenWorkspaces, err = s.CountWorkspaces(); err != nil {
 		return c, err
 	}
+	if c.WorkspaceFiles, err = s.CountWorkspaceFiles(); err != nil {
+		return c, err
+	}
+	if c.WorkspaceBranches, err = s.CountWorkspaceBranches(); err != nil {
+		return c, err
+	}
+	if c.WorkspaceDecisions, err = s.CountWorkspaceDecisions(); err != nil {
+		return c, err
+	}
+	if c.WorkspaceNotes, err = s.CountWorkspaceNotes(); err != nil {
+		return c, err
+	}
 	if c.HealthRuns, err = s.CountHealthRuns(); err != nil {
+		return c, err
+	}
+	if c.Events, err = s.CountEvents(); err != nil {
+		return c, err
+	}
+	if c.WorkspaceCommits, err = s.CountWorkspaceCommits(); err != nil {
 		return c, err
 	}
 	return c, nil
@@ -78,6 +109,51 @@ func (s *Store) CountWorkspaces() (total, open int, err error) {
 // The health engine lands in v0.3; the count is always zero in v0.1.
 func (s *Store) CountHealthRuns() (int, error) {
 	return s.countRows("health_runs")
+}
+
+// CountWorkspaceFiles returns the total number of workspace_files rows
+// across all workspaces. Added in migration 0002 (v0.4 Workspace
+// Engine). The per-workspace count is exposed via
+// internal/workspace.Store.ListFiles.
+func (s *Store) CountWorkspaceFiles() (int, error) {
+	return s.countRows("workspace_files")
+}
+
+// CountWorkspaceBranches returns the total number of workspace_branches
+// rows. Added in migration 0002.
+func (s *Store) CountWorkspaceBranches() (int, error) {
+	return s.countRows("workspace_branches")
+}
+
+// CountWorkspaceDecisions returns the total number of
+// workspace_decisions rows. Added in migration 0002. This is
+// intentionally separate from CountDecisions (the global ADR table
+// from got-spec.md §12) so callers can distinguish per-workspace
+// decisions from repo-wide ADRs.
+func (s *Store) CountWorkspaceDecisions() (int, error) {
+	return s.countRows("workspace_decisions")
+}
+
+// CountWorkspaceNotes returns the total number of workspace_notes rows.
+// Added in migration 0002.
+func (s *Store) CountWorkspaceNotes() (int, error) {
+	return s.countRows("workspace_notes")
+}
+
+// CountEvents returns the total number of events rows. Added in
+// migration 0003 (v0.4 Event Bus). The events table is the durable
+// replay log for the internal/eventbus package; `got status` shows
+// this count so users can see when the log is non-empty.
+func (s *Store) CountEvents() (int, error) {
+	return s.countRows("events")
+}
+
+// CountWorkspaceCommits returns the total number of workspace_commits
+// rows. Added in migration 0004 (v0.5 Workspace Engine). Pinned
+// commits per workspace; surfaced by `got status` so users can see
+// when any workspace has been pinned to a commit.
+func (s *Store) CountWorkspaceCommits() (int, error) {
+	return s.countRows("workspace_commits")
 }
 
 // countRows returns COUNT(*) from the named table. The table name is
@@ -129,13 +205,17 @@ func (s *Store) countRowsWhere(table, where string) (int, error) {
 // name fails loudly instead of silently exposing every table in the
 // schema to a possibly-malformed input.
 var allowedCountTables = map[string]bool{
-	"snapshots":       true,
-	"decisions":       true,
-	"workspaces":      true,
-	"workspace_files": true,
-	"health_runs":     true,
-	"cache_kv":        true,
-	"meta":            true,
+	"snapshots":            true,
+	"decisions":            true,
+	"workspaces":           true,
+	"workspace_files":      true,
+	"workspace_branches":   true,
+	"workspace_decisions":  true,
+	"workspace_notes":      true,
+	"health_runs":          true,
+	"events":               true,
+	"cache_kv":             true,
+	"meta":                 true,
 }
 
 // isAllowedCountTable reports whether name is in allowedCountTables.

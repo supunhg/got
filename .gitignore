@@ -18,3 +18,7 @@ coverage.html
 # OS
 .DS_Store
 Thumbs.db
+
+# Architecture audit reports (one-off, not part of the source tree)
+ARCHITECTURE_AUDIT*.md
+audit-*.md

@@ -177,7 +177,9 @@ func TestTouchInitMetaIsIdempotent(t *testing.T) {
 
 // TestSnapshotFKOnDeleteCascade verifies the workspace_files FK and the
 // ON DELETE CASCADE behavior wired in by the foreign_keys pragma. This
-// also indirectly proves the pragma is applied at Open time.
+// also indirectly proves the pragma is applied at Open time. The test
+// uses the v0.4 workspaces shape (title is NOT NULL) introduced in
+// migration 0002.
 func TestSnapshotFKOnDeleteCascade(t *testing.T) {
 	dir := t.TempDir()
 	s, err := Open(filepath.Join(dir, "got.db"))
@@ -186,15 +188,15 @@ func TestSnapshotFKOnDeleteCascade(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = s.Close() })
 
-	// workspaces is "used in v0.4" per §12, but its schema is created
-	// now, so we can exercise the FK. Insert a workspace and a file.
+	// workspaces is "used in v0.4" per §12. After migration 0002 the
+	// schema requires title, so we set it.
 	if _, err := s.db.Exec(
-		`INSERT INTO workspaces(id, name, created_at, state) VALUES('w1', 'demo', 1700000000000, 'open')`,
+		`INSERT INTO workspaces(id, name, title, created_at, updated_at, state) VALUES('w1', 'demo', 'Demo', 1700000000000, 1700000000000, 'open')`,
 	); err != nil {
 		t.Fatalf("insert workspace: %v", err)
 	}
 	if _, err := s.db.Exec(
-		`INSERT INTO workspace_files(workspace_id, path) VALUES('w1', 'a/b/c.go')`,
+		`INSERT INTO workspace_files(workspace_id, path, added_at) VALUES('w1', 'a/b/c.go', 1700000000000)`,
 	); err != nil {
 		t.Fatalf("insert workspace_file: %v", err)
 	}
@@ -271,7 +273,25 @@ func TestMigrateBodyContainsCreateTable(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS cache_kv",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("migration missing %q", want)
+			t.Errorf("migration 0001 missing %q", want)
+		}
+	}
+	// Migration 0002 brings the workspace tables to the v0.4 shape.
+	body2, err := fsReadFile("migrations/0002_workspaces.sql")
+	if err != nil {
+		t.Fatalf("ReadFile 0002: %v", err)
+	}
+	for _, want := range []string{
+		"DROP TABLE IF EXISTS workspace_files",
+		"DROP TABLE IF EXISTS workspaces",
+		"CREATE TABLE workspaces",
+		"CREATE TABLE workspace_files",
+		"CREATE TABLE workspace_branches",
+		"CREATE TABLE workspace_decisions",
+		"CREATE TABLE workspace_notes",
+	} {
+		if !strings.Contains(body2, want) {
+			t.Errorf("migration 0002 missing %q", want)
 		}
 	}
 }

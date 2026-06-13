@@ -1,0 +1,662 @@
+{
+  "/home/ubuntu/github/got/cmd/got/main.go": {
+    "mtime": 1781260144.9243493,
+    "ast_hash": "d456714c41f90b6590515148bb056b7f",
+    "semantic_hash": "d456714c41f90b6590515148bb056b7f"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/analyze.go": {
+    "mtime": 1781263031.854027,
+    "ast_hash": "7046186413100b96278c988501f1ea3d",
+    "semantic_hash": "7046186413100b96278c988501f1ea3d"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/analyzer.go": {
+    "mtime": 1781263352.8259914,
+    "ast_hash": "161dd7add8eca26c30a20f5090804afb",
+    "semantic_hash": "161dd7add8eca26c30a20f5090804afb"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/analyzer_test.go": {
+    "mtime": 1781263758.686939,
+    "ast_hash": "980947d8e11b35f5c5ebe8e1211a9793",
+    "semantic_hash": "980947d8e11b35f5c5ebe8e1211a9793"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/cicd.go": {
+    "mtime": 1781263758.680939,
+    "ast_hash": "058ae5189a1778948c2f7a7aa77711ee",
+    "semantic_hash": "058ae5189a1778948c2f7a7aa77711ee"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/container.go": {
+    "mtime": 1781263216.704011,
+    "ast_hash": "69ead819a3be22c801e688bbc3e947de",
+    "semantic_hash": "69ead819a3be22c801e688bbc3e947de"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/detector.go": {
+    "mtime": 1781261884.645138,
+    "ast_hash": "bf40f800f0fba47e11a849aae33d2e4f",
+    "semantic_hash": "bf40f800f0fba47e11a849aae33d2e4f"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/framework.go": {
+    "mtime": 1781263810.6069348,
+    "ast_hash": "8285b3ba610f686e10005d788ae4ebec",
+    "semantic_hash": "8285b3ba610f686e10005d788ae4ebec"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/json_helpers.go": {
+    "mtime": 1781262340.535081,
+    "ast_hash": "c4ad94c2235e52b1cba1643dadb3ab32",
+    "semantic_hash": "c4ad94c2235e52b1cba1643dadb3ab32"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/json_helpers_test.go": {
+    "mtime": 1781262768.9000309,
+    "ast_hash": "b53e506b1c91205b973d4e559f931161",
+    "semantic_hash": "b53e506b1c91205b973d4e559f931161"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/language.go": {
+    "mtime": 1781263283.8580012,
+    "ast_hash": "4c2851e54be143cda2fe64ba27c1ecfa",
+    "semantic_hash": "4c2851e54be143cda2fe64ba27c1ecfa"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/monorepo.go": {
+    "mtime": 1781262963.7190063,
+    "ast_hash": "bddec961a7ec088272d83d99989c7726",
+    "semantic_hash": "bddec961a7ec088272d83d99989c7726"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/packagemanager.go": {
+    "mtime": 1781262963.7330062,
+    "ast_hash": "a2ef03810d510f482659f68b3a468809",
+    "semantic_hash": "a2ef03810d510f482659f68b3a468809"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/repotype.go": {
+    "mtime": 1781262963.6960063,
+    "ast_hash": "6bbed52ddc93f9535d05a605ce333537",
+    "semantic_hash": "6bbed52ddc93f9535d05a605ce333537"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/stats.go": {
+    "mtime": 1781263352.8339913,
+    "ast_hash": "eda4014b78a34217ab92a5766811066c",
+    "semantic_hash": "eda4014b78a34217ab92a5766811066c"
+  },
+  "/home/ubuntu/github/got/internal/analyzer/walk.go": {
+    "mtime": 1781262021.2311208,
+    "ast_hash": "fd208a90c60972f91234ed48b119d961",
+    "semantic_hash": "fd208a90c60972f91234ed48b119d961"
+  },
+  "/home/ubuntu/github/got/internal/branchwiz/model.go": {
+    "mtime": 1781240619.1152396,
+    "ast_hash": "6db6571ebe1a1788994f803d8e9c4a98",
+    "semantic_hash": "6db6571ebe1a1788994f803d8e9c4a98"
+  },
+  "/home/ubuntu/github/got/internal/branchwiz/wizard.go": {
+    "mtime": 1781240231.2682755,
+    "ast_hash": "7ae80628b4493ab1ec3fd75397085202",
+    "semantic_hash": "7ae80628b4493ab1ec3fd75397085202"
+  },
+  "/home/ubuntu/github/got/internal/branchwiz/wizard_test.go": {
+    "mtime": 1781240343.9642663,
+    "ast_hash": "3eea4cd686ed5264221b04e75a621324",
+    "semantic_hash": "3eea4cd686ed5264221b04e75a621324"
+  },
+  "/home/ubuntu/github/got/internal/cli/branch.go": {
+    "mtime": 1781254404.5840766,
+    "ast_hash": "fdc274bfcc03346ac49edf37691c05f9",
+    "semantic_hash": "fdc274bfcc03346ac49edf37691c05f9"
+  },
+  "/home/ubuntu/github/got/internal/cli/branch_test.go": {
+    "mtime": 1781240680.9902334,
+    "ast_hash": "f11620a2b7d7441c6048571473ef9c4a",
+    "semantic_hash": "f11620a2b7d7441c6048571473ef9c4a"
+  },
+  "/home/ubuntu/github/got/internal/cli/chdir_test.go": {
+    "mtime": 1781232754.5211449,
+    "ast_hash": "d637a8c6b399a6e12e40e9cec1eafdec",
+    "semantic_hash": "d637a8c6b399a6e12e40e9cec1eafdec"
+  },
+  "/home/ubuntu/github/got/internal/cli/cli_test.go": {
+    "mtime": 1781230881.896378,
+    "ast_hash": "057781a3928dd897fea53ca34cf47a11",
+    "semantic_hash": "057781a3928dd897fea53ca34cf47a11"
+  },
+  "/home/ubuntu/github/got/internal/cli/cmd_log2_test.go": {
+    "mtime": 1781256270.2728581,
+    "ast_hash": "bdb29ed002b00b306966e7b283046f5d",
+    "semantic_hash": "bdb29ed002b00b306966e7b283046f5d"
+  },
+  "/home/ubuntu/github/got/internal/cli/cmd_log_test.go": {
+    "mtime": 1781256270.2748582,
+    "ast_hash": "f64e0bf5c832a4c0cec026e9a2381631",
+    "semantic_hash": "f64e0bf5c832a4c0cec026e9a2381631"
+  },
+  "/home/ubuntu/github/got/internal/cli/commit.go": {
+    "mtime": 1781254196.060099,
+    "ast_hash": "4da8b499933ff4f077a256675f498167",
+    "semantic_hash": "4da8b499933ff4f077a256675f498167"
+  },
+  "/home/ubuntu/github/got/internal/cli/commit_test.go": {
+    "mtime": 1781239416.8893528,
+    "ast_hash": "33a4d153f01205a32e676c597d6dd47e",
+    "semantic_hash": "33a4d153f01205a32e676c597d6dd47e"
+  },
+  "/home/ubuntu/github/got/internal/cli/deps.go": {
+    "mtime": 1781252504.5682733,
+    "ast_hash": "2ccb1b090bfe56d1428f50fe4fce4ec0",
+    "semantic_hash": "2ccb1b090bfe56d1428f50fe4fce4ec0"
+  },
+  "/home/ubuntu/github/got/internal/cli/exit_codes_test.go": {
+    "mtime": 1781251368.7574043,
+    "ast_hash": "98426cb36c70afa809a9b81bf45e429b",
+    "semantic_hash": "98426cb36c70afa809a9b81bf45e429b"
+  },
+  "/home/ubuntu/github/got/internal/cli/format_bytes.go": {
+    "mtime": 1781262672.8470397,
+    "ast_hash": "146e3f868845a533c87b318ad51e6976",
+    "semantic_hash": "146e3f868845a533c87b318ad51e6976"
+  },
+  "/home/ubuntu/github/got/internal/cli/graph.go": {
+    "mtime": 1781254790.5100327,
+    "ast_hash": "ea817c2bd9a47df0a95aa3527ce0fcd8",
+    "semantic_hash": "ea817c2bd9a47df0a95aa3527ce0fcd8"
+  },
+  "/home/ubuntu/github/got/internal/cli/graph_test.go": {
+    "mtime": 1781242448.2990944,
+    "ast_hash": "86f803e77f8f08a60b5d991932ba7010",
+    "semantic_hash": "86f803e77f8f08a60b5d991932ba7010"
+  },
+  "/home/ubuntu/github/got/internal/cli/health.go": {
+    "mtime": 1781262963.6810062,
+    "ast_hash": "3915751999ee044f3b6a9bdb8f1aaa45",
+    "semantic_hash": "3915751999ee044f3b6a9bdb8f1aaa45"
+  },
+  "/home/ubuntu/github/got/internal/cli/init.go": {
+    "mtime": 1781252092.7293193,
+    "ast_hash": "6accdb65914612ba50431b335fbe0050",
+    "semantic_hash": "6accdb65914612ba50431b335fbe0050"
+  },
+  "/home/ubuntu/github/got/internal/cli/init_test.go": {
+    "mtime": 1781235540.4267876,
+    "ast_hash": "df609e39eebf7a0c6e3d0574fbc3509f",
+    "semantic_hash": "df609e39eebf7a0c6e3d0574fbc3509f"
+  },
+  "/home/ubuntu/github/got/internal/cli/inspect.go": {
+    "mtime": 1781262963.7340062,
+    "ast_hash": "4e27e4a60e6e63a3f4e7b4904df20ce4",
+    "semantic_hash": "4e27e4a60e6e63a3f4e7b4904df20ce4"
+  },
+  "/home/ubuntu/github/got/internal/cli/now.go": {
+    "mtime": 1781232169.50722,
+    "ast_hash": "8878718cddbbc7054dfc3f206bd0d809",
+    "semantic_hash": "8878718cddbbc7054dfc3f206bd0d809"
+  },
+  "/home/ubuntu/github/got/internal/cli/plugin.go": {
+    "mtime": 1781254341.0690835,
+    "ast_hash": "3e264bafbd396fe19bf676c5c3990950",
+    "semantic_hash": "3e264bafbd396fe19bf676c5c3990950"
+  },
+  "/home/ubuntu/github/got/internal/cli/plugin_log_test.go": {
+    "mtime": 1781256304.303472,
+    "ast_hash": "7708c26ca06b0de412b06a0fc5e8558a",
+    "semantic_hash": "7708c26ca06b0de412b06a0fc5e8558a"
+  },
+  "/home/ubuntu/github/got/internal/cli/plugin_test.go": {
+    "mtime": 1781246980.1708386,
+    "ast_hash": "553215e6d73abfe0e0da780ab11d52d9",
+    "semantic_hash": "553215e6d73abfe0e0da780ab11d52d9"
+  },
+  "/home/ubuntu/github/got/internal/cli/remote.go": {
+    "mtime": 1781255509.8829556,
+    "ast_hash": "b69c2fced20a17e512461bbb9c72bb0f",
+    "semantic_hash": "b69c2fced20a17e512461bbb9c72bb0f"
+  },
+  "/home/ubuntu/github/got/internal/cli/remote_log2_test.go": {
+    "mtime": 1781256270.2948582,
+    "ast_hash": "ff0e51f2667396127c78e9a387e3b69a",
+    "semantic_hash": "ff0e51f2667396127c78e9a387e3b69a"
+  },
+  "/home/ubuntu/github/got/internal/cli/remote_log_test.go": {
+    "mtime": 1781256270.2968583,
+    "ast_hash": "1eb01651837a6fa867bbb3e7d975604c",
+    "semantic_hash": "1eb01651837a6fa867bbb3e7d975604c"
+  },
+  "/home/ubuntu/github/got/internal/cli/remote_test.go": {
+    "mtime": 1781241648.9651494,
+    "ast_hash": "6ae52fab7edfb35cf478c2822e7115c1",
+    "semantic_hash": "6ae52fab7edfb35cf478c2822e7115c1"
+  },
+  "/home/ubuntu/github/got/internal/cli/root.go": {
+    "mtime": 1781262672.8550396,
+    "ast_hash": "5ad8672a54c790570148faec96438fce",
+    "semantic_hash": "5ad8672a54c790570148faec96438fce"
+  },
+  "/home/ubuntu/github/got/internal/cli/status.go": {
+    "mtime": 1781254163.203102,
+    "ast_hash": "0935bca854eebf6ae9b3728c6956aa86",
+    "semantic_hash": "0935bca854eebf6ae9b3728c6956aa86"
+  },
+  "/home/ubuntu/github/got/internal/cli/status_test.go": {
+    "mtime": 1781237597.864554,
+    "ast_hash": "0b9a1c39aea21aa6d1771668f7ae59e9",
+    "semantic_hash": "0b9a1c39aea21aa6d1771668f7ae59e9"
+  },
+  "/home/ubuntu/github/got/internal/cli/terminal.go": {
+    "mtime": 1781233485.164055,
+    "ast_hash": "0a61f57751ade2cf6b9b1a98b580f04e",
+    "semantic_hash": "0a61f57751ade2cf6b9b1a98b580f04e"
+  },
+  "/home/ubuntu/github/got/internal/cli/testhelpers_test.go": {
+    "mtime": 1781256053.8928866,
+    "ast_hash": "e126202f9b6c88f4cf7d7577f545220d",
+    "semantic_hash": "e126202f9b6c88f4cf7d7577f545220d"
+  },
+  "/home/ubuntu/github/got/internal/cli/tui.go": {
+    "mtime": 1781254865.1930242,
+    "ast_hash": "6f5fb329e38b3ad2e10737798f3000b0",
+    "semantic_hash": "6f5fb329e38b3ad2e10737798f3000b0"
+  },
+  "/home/ubuntu/github/got/internal/cli/tui_test.go": {
+    "mtime": 1781246031.2508802,
+    "ast_hash": "1dc5d7f3d684b20ba20ccba7fbdbd7c9",
+    "semantic_hash": "1dc5d7f3d684b20ba20ccba7fbdbd7c9"
+  },
+  "/home/ubuntu/github/got/internal/cli/user.go": {
+    "mtime": 1781232070.9642286,
+    "ast_hash": "0ebbc03f39c53a6f24109ca821c863cb",
+    "semantic_hash": "0ebbc03f39c53a6f24109ca821c863cb"
+  },
+  "/home/ubuntu/github/got/internal/cli/worktree.go": {
+    "mtime": 1781254845.7950263,
+    "ast_hash": "224ad206051fc59f003ee267cf4244b4",
+    "semantic_hash": "224ad206051fc59f003ee267cf4244b4"
+  },
+  "/home/ubuntu/github/got/internal/cli/worktree_test.go": {
+    "mtime": 1781245469.1049106,
+    "ast_hash": "9d41e741653623b564c2426a4d17703a",
+    "semantic_hash": "9d41e741653623b564c2426a4d17703a"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/conventional.go": {
+    "mtime": 1781237329.579589,
+    "ast_hash": "47ad77f431364ceec36cb6f0fd5d9a4c",
+    "semantic_hash": "47ad77f431364ceec36cb6f0fd5d9a4c"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/conventional_test.go": {
+    "mtime": 1781236847.2166333,
+    "ast_hash": "7e40f249972c4f7a8ce3992c0c3bc0d0",
+    "semantic_hash": "7e40f249972c4f7a8ce3992c0c3bc0d0"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/model.go": {
+    "mtime": 1781237153.7466025,
+    "ast_hash": "eae4ca4ba8fcce45131510f975720cd8",
+    "semantic_hash": "eae4ca4ba8fcce45131510f975720cd8"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/suggest.go": {
+    "mtime": 1781237341.9455857,
+    "ast_hash": "ab39406396700649e103c75cccdc2ac4",
+    "semantic_hash": "ab39406396700649e103c75cccdc2ac4"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/suggest_test.go": {
+    "mtime": 1781235984.1577356,
+    "ast_hash": "fd151db04f2701f03a145a4f35b55fe7",
+    "semantic_hash": "fd151db04f2701f03a145a4f35b55fe7"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/wizard.go": {
+    "mtime": 1781236847.2206333,
+    "ast_hash": "033ceb40fb073184605115b010ad7aa4",
+    "semantic_hash": "033ceb40fb073184605115b010ad7aa4"
+  },
+  "/home/ubuntu/github/got/internal/commitwiz/wizard_test.go": {
+    "mtime": 1781237627.2175503,
+    "ast_hash": "cf8893d55976bdb3f11b5e2c04f3a693",
+    "semantic_hash": "cf8893d55976bdb3f11b5e2c04f3a693"
+  },
+  "/home/ubuntu/github/got/internal/config/config.go": {
+    "mtime": 1781232015.058234,
+    "ast_hash": "2dfd70034422d445fd1484be2b8992ed",
+    "semantic_hash": "2dfd70034422d445fd1484be2b8992ed"
+  },
+  "/home/ubuntu/github/got/internal/config/config_test.go": {
+    "mtime": 1781232015.060234,
+    "ast_hash": "10f806f952ab01d98ff709b2653f770b",
+    "semantic_hash": "10f806f952ab01d98ff709b2653f770b"
+  },
+  "/home/ubuntu/github/got/internal/dashwiz/model.go": {
+    "mtime": 1781247144.6298306,
+    "ast_hash": "94a6b0e5ea7a899b0d5e584e90357813",
+    "semantic_hash": "94a6b0e5ea7a899b0d5e584e90357813"
+  },
+  "/home/ubuntu/github/got/internal/dashwiz/wizard.go": {
+    "mtime": 1781246080.4458785,
+    "ast_hash": "3b90c7d116ccc36a3522e7d64804c841",
+    "semantic_hash": "3b90c7d116ccc36a3522e7d64804c841"
+  },
+  "/home/ubuntu/github/got/internal/dashwiz/wizard_test.go": {
+    "mtime": 1781245977.4058828,
+    "ast_hash": "f40a17e3e69577c1104d731419ac059b",
+    "semantic_hash": "f40a17e3e69577c1104d731419ac059b"
+  },
+  "/home/ubuntu/github/got/internal/gerr/gerr.go": {
+    "mtime": 1781250003.1655698,
+    "ast_hash": "6fe1dfd73308928ed7ef8ac8de974cd8",
+    "semantic_hash": "6fe1dfd73308928ed7ef8ac8de974cd8"
+  },
+  "/home/ubuntu/github/got/internal/gerr/gerr_test.go": {
+    "mtime": 1781250019.2435677,
+    "ast_hash": "e67c8ad72d953966e4851f187ce68ba2",
+    "semantic_hash": "e67c8ad72d953966e4851f187ce68ba2"
+  },
+  "/home/ubuntu/github/got/internal/git/adapter.go": {
+    "mtime": 1781244428.5329642,
+    "ast_hash": "ff1547f058fe78c254eacd2187e105ab",
+    "semantic_hash": "ff1547f058fe78c254eacd2187e105ab"
+  },
+  "/home/ubuntu/github/got/internal/git/exec.go": {
+    "mtime": 1781252449.2492793,
+    "ast_hash": "0130ea2d33df5f4c6bb73d829e0751a6",
+    "semantic_hash": "0130ea2d33df5f4c6bb73d829e0751a6"
+  },
+  "/home/ubuntu/github/got/internal/git/exec_log_test.go": {
+    "mtime": 1781252637.6272573,
+    "ast_hash": "0ad257e98bc7f75644048052d585a93d",
+    "semantic_hash": "0ad257e98bc7f75644048052d585a93d"
+  },
+  "/home/ubuntu/github/got/internal/git/exec_test.go": {
+    "mtime": 1781231079.969354,
+    "ast_hash": "49198303fd5e3b239502d95848f9d66a",
+    "semantic_hash": "49198303fd5e3b239502d95848f9d66a"
+  },
+  "/home/ubuntu/github/got/internal/git/fake.go": {
+    "mtime": 1781245469.1049106,
+    "ast_hash": "d07765d0ce8e92d4749ae0e1b352f69e",
+    "semantic_hash": "d07765d0ce8e92d4749ae0e1b352f69e"
+  },
+  "/home/ubuntu/github/got/internal/git/fake_test.go": {
+    "mtime": 1781230421.417428,
+    "ast_hash": "5f08f9524f74f00c6f54d41d180d2089",
+    "semantic_hash": "5f08f9524f74f00c6f54d41d180d2089"
+  },
+  "/home/ubuntu/github/got/internal/git/helpers_test.go": {
+    "mtime": 1781230742.1663942,
+    "ast_hash": "6a6dd4af1761baa5a16b1a3db18009af",
+    "semantic_hash": "6a6dd4af1761baa5a16b1a3db18009af"
+  },
+  "/home/ubuntu/github/got/internal/git/stage.go": {
+    "mtime": 1781236420.8776863,
+    "ast_hash": "ab23d371833865fb9fd84b085afedb9a",
+    "semantic_hash": "ab23d371833865fb9fd84b085afedb9a"
+  },
+  "/home/ubuntu/github/got/internal/graph/dot.go": {
+    "mtime": 1781242247.6641092,
+    "ast_hash": "db02560a8a2412254155c6b38e37cf2b",
+    "semantic_hash": "db02560a8a2412254155c6b38e37cf2b"
+  },
+  "/home/ubuntu/github/got/internal/graph/dot_test.go": {
+    "mtime": 1781242388.9150984,
+    "ast_hash": "d5a5172d9accc9ba4f5a9799fa0ac33a",
+    "semantic_hash": "d5a5172d9accc9ba4f5a9799fa0ac33a"
+  },
+  "/home/ubuntu/github/got/internal/graph/render.go": {
+    "mtime": 1781242247.657109,
+    "ast_hash": "2d17020ca315aae9ebf5d814fd35cfb7",
+    "semantic_hash": "2d17020ca315aae9ebf5d814fd35cfb7"
+  },
+  "/home/ubuntu/github/got/internal/graph/render_test.go": {
+    "mtime": 1781242839.6350722,
+    "ast_hash": "11ed42099af8fbf75e0af6d27759f07b",
+    "semantic_hash": "11ed42099af8fbf75e0af6d27759f07b"
+  },
+  "/home/ubuntu/github/got/internal/graphwiz/model.go": {
+    "mtime": 1781249539.05463,
+    "ast_hash": "8ca5dc0ba05007c5861efe5626ec1247",
+    "semantic_hash": "8ca5dc0ba05007c5861efe5626ec1247"
+  },
+  "/home/ubuntu/github/got/internal/graphwiz/wizard.go": {
+    "mtime": 1781242247.6811092,
+    "ast_hash": "f5af05146e00d561076d129e87bf5b91",
+    "semantic_hash": "f5af05146e00d561076d129e87bf5b91"
+  },
+  "/home/ubuntu/github/got/internal/graphwiz/wizard_test.go": {
+    "mtime": 1781249512.9446309,
+    "ast_hash": "df99613c68ca7c91a3f1ae5718980817",
+    "semantic_hash": "df99613c68ca7c91a3f1ae5718980817"
+  },
+  "/home/ubuntu/github/got/internal/health/branches.go": {
+    "mtime": 1781263216.7580109,
+    "ast_hash": "e2bd9d3e506324f76a956e2015680bd1",
+    "semantic_hash": "e2bd9d3e506324f76a956e2015680bd1"
+  },
+  "/home/ubuntu/github/got/internal/health/cleanliness.go": {
+    "mtime": 1781263031.870027,
+    "ast_hash": "e30a15c4a9aa686bde9ee7722c105366",
+    "semantic_hash": "e30a15c4a9aa686bde9ee7722c105366"
+  },
+  "/home/ubuntu/github/got/internal/health/docs.go": {
+    "mtime": 1781263352.8359914,
+    "ast_hash": "bb7cdb41c9a713a3f5ac0e50ef7e0645",
+    "semantic_hash": "bb7cdb41c9a713a3f5ac0e50ef7e0645"
+  },
+  "/home/ubuntu/github/got/internal/health/files.go": {
+    "mtime": 1781262963.7060063,
+    "ast_hash": "f6b048f92eebb972a631145b2747aaab",
+    "semantic_hash": "f6b048f92eebb972a631145b2747aaab"
+  },
+  "/home/ubuntu/github/got/internal/health/health.go": {
+    "mtime": 1781262963.7090063,
+    "ast_hash": "cfd86c735f3a829b7fcfef78a0abe28c",
+    "semantic_hash": "cfd86c735f3a829b7fcfef78a0abe28c"
+  },
+  "/home/ubuntu/github/got/internal/health/health_test.go": {
+    "mtime": 1781263604.0248609,
+    "ast_hash": "8496052bae3883792fa5bc16a0530166",
+    "semantic_hash": "8496052bae3883792fa5bc16a0530166"
+  },
+  "/home/ubuntu/github/got/internal/health/remotes.go": {
+    "mtime": 1781263352.8369913,
+    "ast_hash": "d8b4819dafc5c851829f0e0cca1fc515",
+    "semantic_hash": "d8b4819dafc5c851829f0e0cca1fc515"
+  },
+  "/home/ubuntu/github/got/internal/initwiz/detect.go": {
+    "mtime": 1781233237.3050861,
+    "ast_hash": "306a56544019687005ff8964a9b72fce",
+    "semantic_hash": "306a56544019687005ff8964a9b72fce"
+  },
+  "/home/ubuntu/github/got/internal/initwiz/detect_test.go": {
+    "mtime": 1781233237.3210862,
+    "ast_hash": "bbd3bf759487b429ea33a1dee56424bc",
+    "semantic_hash": "bbd3bf759487b429ea33a1dee56424bc"
+  },
+  "/home/ubuntu/github/got/internal/initwiz/model.go": {
+    "mtime": 1781233786.0800128,
+    "ast_hash": "5862bc09bcafd806031b855a635d3093",
+    "semantic_hash": "5862bc09bcafd806031b855a635d3093"
+  },
+  "/home/ubuntu/github/got/internal/initwiz/wizard.go": {
+    "mtime": 1781233778.9060137,
+    "ast_hash": "d94ddbac6ee700fc8bcf112079701e00",
+    "semantic_hash": "d94ddbac6ee700fc8bcf112079701e00"
+  },
+  "/home/ubuntu/github/got/internal/initwiz/wizard_test.go": {
+    "mtime": 1781233393.0480673,
+    "ast_hash": "cdd06813572ac5144891de0bdb0ad776",
+    "semantic_hash": "cdd06813572ac5144891de0bdb0ad776"
+  },
+  "/home/ubuntu/github/got/internal/log/count.go": {
+    "mtime": 1781258856.388465,
+    "ast_hash": "d79a9d6c8efcbe4b1d1eed7169831ebb",
+    "semantic_hash": "d79a9d6c8efcbe4b1d1eed7169831ebb"
+  },
+  "/home/ubuntu/github/got/internal/log/count_test.go": {
+    "mtime": 1781259346.4904513,
+    "ast_hash": "fde6e9c85efdbece71cd29fdfe5be4ed",
+    "semantic_hash": "fde6e9c85efdbece71cd29fdfe5be4ed"
+  },
+  "/home/ubuntu/github/got/internal/log/log.go": {
+    "mtime": 1781255147.6719923,
+    "ast_hash": "9a525d5f53d168ef325b2c208e44c3ea",
+    "semantic_hash": "9a525d5f53d168ef325b2c208e44c3ea"
+  },
+  "/home/ubuntu/github/got/internal/log/log_test.go": {
+    "mtime": 1781255181.8659887,
+    "ast_hash": "6fcfac26ca3a74cce3e5a19f23e2f9cc",
+    "semantic_hash": "6fcfac26ca3a74cce3e5a19f23e2f9cc"
+  },
+  "/home/ubuntu/github/got/internal/log/rotate.go": {
+    "mtime": 1781260121.6953523,
+    "ast_hash": "6924bb574ce15c2cbb2edea126ca4c86",
+    "semantic_hash": "6924bb574ce15c2cbb2edea126ca4c86"
+  },
+  "/home/ubuntu/github/got/internal/log/rotate_test.go": {
+    "mtime": 1781260577.389539,
+    "ast_hash": "3aa4f19b5f2398997eab56e15d50502f",
+    "semantic_hash": "3aa4f19b5f2398997eab56e15d50502f"
+  },
+  "/home/ubuntu/github/got/internal/log/session.go": {
+    "mtime": 1781258856.4036746,
+    "ast_hash": "ca0afdd4627b8b5309044490a698ac11",
+    "semantic_hash": "ca0afdd4627b8b5309044490a698ac11"
+  },
+  "/home/ubuntu/github/got/internal/log/session_test.go": {
+    "mtime": 1781260257.251959,
+    "ast_hash": "2d0b85b2e2078918830b50a4d26be220",
+    "semantic_hash": "2d0b85b2e2078918830b50a4d26be220"
+  },
+  "/home/ubuntu/github/got/internal/plugin/discover.go": {
+    "mtime": 1781243341.3940384,
+    "ast_hash": "7baa1e1fee4a6fffa7071a64a302464f",
+    "semantic_hash": "7baa1e1fee4a6fffa7071a64a302464f"
+  },
+  "/home/ubuntu/github/got/internal/plugin/discover_test.go": {
+    "mtime": 1781243873.2360034,
+    "ast_hash": "a1e43c34b3529eb888bb6ce3b4b9dd56",
+    "semantic_hash": "a1e43c34b3529eb888bb6ce3b4b9dd56"
+  },
+  "/home/ubuntu/github/got/internal/plugin/install.go": {
+    "mtime": 1781250804.4804676,
+    "ast_hash": "4913427a141776fcb97c5b6f5f44b7e7",
+    "semantic_hash": "4913427a141776fcb97c5b6f5f44b7e7"
+  },
+  "/home/ubuntu/github/got/internal/plugin/install_test.go": {
+    "mtime": 1781247558.4818127,
+    "ast_hash": "853874e728fc4a99225e406b20364a15",
+    "semantic_hash": "853874e728fc4a99225e406b20364a15"
+  },
+  "/home/ubuntu/github/got/internal/plugin/manager.go": {
+    "mtime": 1781243341.3990383,
+    "ast_hash": "9c8df7c33858c2e921184608789b7802",
+    "semantic_hash": "9c8df7c33858c2e921184608789b7802"
+  },
+  "/home/ubuntu/github/got/internal/plugin/manifest.go": {
+    "mtime": 1781243873.2350035,
+    "ast_hash": "55c0273bac487fcad2810b6d083aac1b",
+    "semantic_hash": "55c0273bac487fcad2810b6d083aac1b"
+  },
+  "/home/ubuntu/github/got/internal/plugin/manifest_test.go": {
+    "mtime": 1781243873.2370033,
+    "ast_hash": "6605e3bbe7ff800a8d7c724cd9ae1370",
+    "semantic_hash": "6605e3bbe7ff800a8d7c724cd9ae1370"
+  },
+  "/home/ubuntu/github/got/internal/repo/discover.go": {
+    "mtime": 1781230421.420428,
+    "ast_hash": "98e22d12775445ea06ae6c57e23b4ce9",
+    "semantic_hash": "98e22d12775445ea06ae6c57e23b4ce9"
+  },
+  "/home/ubuntu/github/got/internal/repo/discover_test.go": {
+    "mtime": 1781230421.422428,
+    "ast_hash": "e2293bfad5ff7613526d95f474a823fa",
+    "semantic_hash": "e2293bfad5ff7613526d95f474a823fa"
+  },
+  "/home/ubuntu/github/got/internal/repo/repo.go": {
+    "mtime": 1781232015.004234,
+    "ast_hash": "00952d7f6c84ca5fbd732bad6be4a07e",
+    "semantic_hash": "00952d7f6c84ca5fbd732bad6be4a07e"
+  },
+  "/home/ubuntu/github/got/internal/repo/repo_test.go": {
+    "mtime": 1781232015.045234,
+    "ast_hash": "96d15b0012b286a8a4e4d4eafeaa76c5",
+    "semantic_hash": "96d15b0012b286a8a4e4d4eafeaa76c5"
+  },
+  "/home/ubuntu/github/got/internal/store/counts.go": {
+    "mtime": 1781235702.219771,
+    "ast_hash": "25d2980e4d144a8197ea12cd04d9f480",
+    "semantic_hash": "25d2980e4d144a8197ea12cd04d9f480"
+  },
+  "/home/ubuntu/github/got/internal/store/counts_test.go": {
+    "mtime": 1781235165.2088428,
+    "ast_hash": "d863516e64e3d13f9d433db247a86cbf",
+    "semantic_hash": "d863516e64e3d13f9d433db247a86cbf"
+  },
+  "/home/ubuntu/github/got/internal/store/helpers_test.go": {
+    "mtime": 1781231902.7412562,
+    "ast_hash": "9ffa85568df2a0fa83b9419c7ae53158",
+    "semantic_hash": "9ffa85568df2a0fa83b9419c7ae53158"
+  },
+  "/home/ubuntu/github/got/internal/store/migrations/0001_init.sql": {
+    "mtime": 1781232458.7491815,
+    "ast_hash": "092a65a72062df4c012ada3f93e90088",
+    "semantic_hash": "092a65a72062df4c012ada3f93e90088"
+  },
+  "/home/ubuntu/github/got/internal/store/store.go": {
+    "mtime": 1781231902.733256,
+    "ast_hash": "a1d991edb8877f455b72113aa119538d",
+    "semantic_hash": "a1d991edb8877f455b72113aa119538d"
+  },
+  "/home/ubuntu/github/got/internal/store/store_test.go": {
+    "mtime": 1781232667.857155,
+    "ast_hash": "6b2def145d386d808257e3c71a721264",
+    "semantic_hash": "6b2def145d386d808257e3c71a721264"
+  },
+  "/home/ubuntu/github/got/internal/tui/theme.go": {
+    "mtime": 1781233786.0910127,
+    "ast_hash": "ab180af847c200d71f53a0febcd32631",
+    "semantic_hash": "ab180af847c200d71f53a0febcd32631"
+  },
+  "/home/ubuntu/github/got/internal/version/version.go": {
+    "mtime": 1781228644.579622,
+    "ast_hash": "42eed08b796bd51f831e0135963745ea",
+    "semantic_hash": "42eed08b796bd51f831e0135963745ea"
+  },
+  "/home/ubuntu/github/got/internal/worktree/store.go": {
+    "mtime": 1781245548.0959074,
+    "ast_hash": "3b00d576116ad32196da36cc106cd3ae",
+    "semantic_hash": "3b00d576116ad32196da36cc106cd3ae"
+  },
+  "/home/ubuntu/github/got/internal/worktree/store_test.go": {
+    "mtime": 1781244582.4359555,
+    "ast_hash": "bc0bd5b217470b1b68b562f3eadb445c",
+    "semantic_hash": "bc0bd5b217470b1b68b562f3eadb445c"
+  },
+  "/home/ubuntu/github/got/internal/worktreewiz/model.go": {
+    "mtime": 1781245214.4989235,
+    "ast_hash": "61279f6ac3e4ecd3696b2120b756b786",
+    "semantic_hash": "61279f6ac3e4ecd3696b2120b756b786"
+  },
+  "/home/ubuntu/github/got/internal/worktreewiz/wizard.go": {
+    "mtime": 1781244679.4439504,
+    "ast_hash": "96813434858cfc97949a1a203e63581f",
+    "semantic_hash": "96813434858cfc97949a1a203e63581f"
+  },
+  "/home/ubuntu/github/got/internal/worktreewiz/wizard_test.go": {
+    "mtime": 1781245361.634916,
+    "ast_hash": "b77f1305a687475d3fdd75662f0aef4d",
+    "semantic_hash": "b77f1305a687475d3fdd75662f0aef4d"
+  },
+  "/home/ubuntu/github/got/.golangci.yml": {
+    "mtime": 1781228815.9566112,
+    "ast_hash": "615ded85a4f1e86fd5e9012d35545be4",
+    "semantic_hash": "615ded85a4f1e86fd5e9012d35545be4"
+  },
+  "/home/ubuntu/github/got/ARCHITECTURE.md": {
+    "mtime": 1781201949.038234,
+    "ast_hash": "0baa964e73c6761327bce3e01c1630bc",
+    "semantic_hash": "0baa964e73c6761327bce3e01c1630bc"
+  },
+  "/home/ubuntu/github/got/docs/REPOSITORY_INTELLIGENCE.md": {
+    "mtime": 1781263216.780011,
+    "ast_hash": "3a4a5810d1e86fb5b127738d61530783",
+    "semantic_hash": "3a4a5810d1e86fb5b127738d61530783"
+  },
+  "/home/ubuntu/github/got/got-spec.md": {
+    "mtime": 1781228223.177668,
+    "ast_hash": "da81d41daad5cc3a50ef6c9dc99e00df",
+    "semantic_hash": "da81d41daad5cc3a50ef6c9dc99e00df"
+  },
+  "/home/ubuntu/github/got/got.yml": {
+    "mtime": 1781232551.2893956,
+    "ast_hash": "80375993af913ea71982854645020995",
+    "semantic_hash": "80375993af913ea71982854645020995"
+  }
+}

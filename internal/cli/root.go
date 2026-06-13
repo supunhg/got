@@ -142,6 +142,9 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newPluginCmd(d))
 	cmd.AddCommand(newWorktreeCmd(d))
 	cmd.AddCommand(newTUICmd(d))
+	cmd.AddCommand(newInspectCmd(d))
+	cmd.AddCommand(newHealthCmd(d))
+	cmd.AddCommand(newWorkspaceCmd(d))
 
 	// Auto-register discovered plugins as `got <plugin-name>
 	// <command>` subcommands per spec §11. v0.1 only registers

@@ -34,7 +34,22 @@ var migrationsFS embed.FS
 // It is updated whenever a new migration file is added to migrations/.
 // The migration runner compares this value to the schema_version row in
 // the meta table to decide what to apply.
-const SchemaVersion = 1
+//
+// Bump history:
+//   - 1: initial schema (got-spec.md §12)
+//   - 2: Workspace Engine (ARCHITECTURE.md "Workspace Engine"):
+//     drops the v0.1 stubs `workspaces` + `workspace_files` and
+//     recreates them with the v0.4 shape; adds `workspace_branches`,
+//     `workspace_decisions`, and `workspace_notes`. See
+//     migrations/0002_workspaces.sql for the full diff.
+//   - 3: Event Bus (docs/EVENT_BUS.md): adds the `events` table as
+//     the durable replay log for the internal/eventbus package.
+//     See migrations/0003_events.sql.
+//   - 4: Workspace Engine v0.5 (ARCHITECTURE_WORKSPACES.md):
+//     adds the `workspace_commits` table so a workspace can
+//     pin a Git commit (independently of branches/files).
+//     See migrations/0004_workspace_commits.sql.
+const SchemaVersion = 4
 
 // Store is an open SQLite database with migrations applied. Always
 // close it with Close when done.

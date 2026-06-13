@@ -21,7 +21,9 @@ func TestCountsAreZeroOnFreshDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Counts: %v", err)
 	}
-	if c.Snapshots != 0 || c.Decisions != 0 || c.Workspaces != 0 || c.OpenWorkspaces != 0 || c.HealthRuns != 0 {
+	if c.Snapshots != 0 || c.Decisions != 0 || c.Workspaces != 0 || c.OpenWorkspaces != 0 ||
+		c.WorkspaceFiles != 0 || c.WorkspaceBranches != 0 || c.WorkspaceDecisions != 0 || c.WorkspaceNotes != 0 ||
+		c.HealthRuns != 0 {
 		t.Errorf("fresh Counts = %+v, want all zeros", c)
 	}
 }
@@ -53,13 +55,15 @@ func TestCountsReflectInsertedRows(t *testing.T) {
 	); err != nil {
 		t.Fatalf("insert decision: %v", err)
 	}
-	// Three workspaces: two open, one closed
+	// Three workspaces: two open, one closed. v0.4 schema (migration
+	// 0002) requires title, so we set it; created_at/updated_at are
+	// NOT NULL and must be set too.
 	for i, st := range []string{"open", "open", "closed"} {
-		stmt, err := s.db.Prepare(`INSERT INTO workspaces(id, name, created_at, state) VALUES(?, ?, ?, ?)`)
+		stmt, err := s.db.Prepare(`INSERT INTO workspaces(id, name, title, created_at, updated_at, state) VALUES(?, ?, ?, ?, ?, ?)`)
 		if err != nil {
 			t.Fatalf("prepare: %v", err)
 		}
-		if _, err := stmt.Exec("w"+string(rune('1'+i)), "ws"+string(rune('1'+i)), 1700000000000, st); err != nil {
+		if _, err := stmt.Exec("w"+string(rune('1'+i)), "ws"+string(rune('1'+i)), "Title", 1700000000000, 1700000000000, st); err != nil {
 			t.Fatalf("insert workspace: %v", err)
 		}
 		_ = stmt.Close()
@@ -102,6 +106,18 @@ func TestPerTableAccessors(t *testing.T) {
 	}
 	if total, open, err := s.CountWorkspaces(); err != nil || total != 0 || open != 0 {
 		t.Errorf("CountWorkspaces = (%d, %d, %v), want (0, 0, nil)", total, open, err)
+	}
+	if n, err := s.CountWorkspaceFiles(); err != nil || n != 0 {
+		t.Errorf("CountWorkspaceFiles = (%d, %v), want (0, nil)", n, err)
+	}
+	if n, err := s.CountWorkspaceBranches(); err != nil || n != 0 {
+		t.Errorf("CountWorkspaceBranches = (%d, %v), want (0, nil)", n, err)
+	}
+	if n, err := s.CountWorkspaceDecisions(); err != nil || n != 0 {
+		t.Errorf("CountWorkspaceDecisions = (%d, %v), want (0, nil)", n, err)
+	}
+	if n, err := s.CountWorkspaceNotes(); err != nil || n != 0 {
+		t.Errorf("CountWorkspaceNotes = (%d, %v), want (0, nil)", n, err)
 	}
 }
 
