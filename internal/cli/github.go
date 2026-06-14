@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,6 +38,9 @@ is active (or via --workspace flag).`,
 	cmd.AddCommand(newGitHubPRCreateCmd())
 	cmd.AddCommand(newGitHubPRListCmd())
 	cmd.AddCommand(newGitHubPRStatusCmd())
+	cmd.AddCommand(newGitHubPRReviewCmd())
+	cmd.AddCommand(newGitHubPRMergeCmd())
+	cmd.AddCommand(newGitHubPRDiffCmd())
 	cmd.AddCommand(newGitHubIssueCreateCmd())
 	cmd.AddCommand(newGitHubIssueListCmd())
 	cmd.AddCommand(newGitHubLinkCmd())
@@ -388,6 +393,7 @@ func runGitHubPRStatus(cmd *cobra.Command, arg string) error {
 		return err
 	}
 	defer kc.Close()
+	ks := kc.ks
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -399,6 +405,9 @@ func runGitHubPRStatus(cmd *cobra.Command, arg string) error {
 
 	fmt.Fprintf(cmd.OutOrStdout(), "#%d: %s\n", pr.GetNumber(), pr.GetTitle())
 	fmt.Fprintf(cmd.OutOrStdout(), "  State:     %s\n", pr.GetState())
+	if pr.GetMerged() {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Merged:    yes\n")
+	}
 	if pr.GetDraft() {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Draft:     yes\n")
 	}
@@ -413,15 +422,18 @@ func runGitHubPRStatus(cmd *cobra.Command, arg string) error {
 			fmt.Fprintln(cmd.OutOrStdout(), "  Mergeable: no (conflicts)")
 		}
 	}
+	if pr.GetMergeableState() != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Merge st.: %s\n", pr.GetMergeableState())
+	}
 
 	if pr.GetBody() != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "\nDescription:\n%s\n", pr.GetBody())
 	}
 
-	// Fetch review status.
+	// Fetch review status from GitHub API.
 	reviews, _, reviewErr := client.PullRequests.ListReviews(ctx, cfg.Owner, cfg.Repo, prNum, nil)
 	if reviewErr == nil && len(reviews) > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "\nReviews: %d\n", len(reviews))
+		fmt.Fprintf(cmd.OutOrStdout(), "\nReviews (GitHub): %d\n", len(reviews))
 		// Show only the most recent review per user.
 		seen := make(map[string]bool)
 		for _, r := range reviews {
@@ -438,6 +450,404 @@ func runGitHubPRStatus(cmd *cobra.Command, arg string) error {
 			} else {
 				fmt.Fprintf(cmd.OutOrStdout(), "  ? %s: %s\n", user, state)
 			}
+		}
+	}
+
+	// Show stored reviews from GOT.
+	storedReviews, listErr := ks.ListReviews(ctx, prNum)
+	if listErr == nil && len(storedReviews) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "\nReviews (GOT): %d\n", len(storedReviews))
+		for _, r := range storedReviews {
+			stateLabel := r.State
+			if r.State == "APPROVED" {
+				stateLabel = "approved"
+			} else if r.State == "CHANGES_REQUESTED" {
+				stateLabel = "changes requested"
+			} else {
+				stateLabel = "commented"
+			}
+			ts := time.UnixMilli(r.SubmittedAt).Format("2006-01-02 15:04")
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s by %s (%s)\n", stateLabel, r.Reviewer, ts)
+			if r.Body != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", truncate(r.Body, 80))
+			}
+		}
+	}
+
+	// Merge hint.
+	if !pr.GetMerged() && pr.GetState() == "open" && pr.Mergeable != nil && *pr.Mergeable {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n  Use 'got github pr merge %d' to merge this PR\n", prNum)
+	}
+
+	// Show stored merge info.
+	storedPR, storedErr := ks.GetPullRequestByNumber(ctx, prNum)
+	if storedErr == nil && storedPR.MergeCommitSHA != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "\nMerged in:  %s\n", storedPR.MergeCommitSHA)
+	}
+
+	return nil
+}
+
+// ── PR Review ────────────────────────────────────────────────────────
+
+func newGitHubPRReviewCmd() *cobra.Command {
+	var body string
+
+	cmd := &cobra.Command{
+		Use:   "pr review <pr-number> [action]",
+		Short: "Submit a review on a pull request",
+		Long: `Submit a review on a pull request: approve, request changes, or comment.
+
+Actions: approve, request-changes, comment (default: comment)
+--body is required for request-changes and comment.
+
+Examples:
+  got github pr review 42 approve
+  got github pr review 42 approve --body "LGTM!"
+  got github pr review 42 request-changes --body "Please fix the test"
+  got github pr review 42 comment --body "Looking good so far"`,
+
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			action := "comment"
+			if len(args) > 1 {
+				action = args[1]
+			}
+			return runGitHubPRReview(cmd, args[0], action, body)
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.StringVar(&body, "body", "", "Review body text")
+
+	return cmd
+}
+
+func runGitHubPRReview(cmd *cobra.Command, arg, action, body string) error {
+	prNum, err := parseIntArg(arg, "PR number")
+	if err != nil {
+		return err
+	}
+
+	// Map action to GitHub review state.
+	var state string
+	switch action {
+	case "approve":
+		state = "APPROVED"
+	case "request-changes":
+		state = "CHANGES_REQUESTED"
+	case "comment":
+		state = "COMMENTED"
+	default:
+		return fmt.Errorf("invalid action %q: must be approve, request-changes, or comment", action)
+	}
+
+	if state != "APPROVED" && body == "" {
+		return fmt.Errorf("--body is required for %s reviews", action)
+	}
+
+	kc, client, cfg, err := getGitHubClient(cmd)
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+	ks := kc.ks
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Get the authenticated user to record as reviewer.
+	user, _, userErr := client.Users.Get(ctx, "")
+	if userErr != nil {
+		return fmt.Errorf("get current user: %w", userErr)
+	}
+	reviewer := user.GetLogin()
+
+	// Submit the review via GitHub API.
+	reviewReq := &github.PullRequestReviewRequest{
+		Body:  &body,
+		Event: &state,
+	}
+	_, _, apiErr := client.PullRequests.CreateReview(ctx, cfg.Owner, cfg.Repo, prNum, reviewReq)
+	if apiErr != nil {
+		return fmt.Errorf("submit review: %w", apiErr)
+	}
+
+	// Look up the PR to get workspace ID for linking.
+	workspaceID := ""
+	if storedPR, getErr := ks.GetPullRequestByNumber(ctx, prNum); getErr == nil {
+		workspaceID = storedPR.WorkspaceID
+	}
+
+	// Record the review in store.
+	_, recErr := ks.CreateReview(ctx, store.CreateReviewParams{
+		PRNumber:    prNum,
+		Reviewer:    reviewer,
+		State:       state,
+		Body:        body,
+		WorkspaceID: workspaceID,
+	})
+	if recErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "  warning: could not record review: %v\n", recErr)
+	}
+
+	stateLabel := action
+	fmt.Fprintf(cmd.OutOrStdout(), "Review submitted on PR #%d\n", prNum)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Action:  %s\n", stateLabel)
+	fmt.Fprintf(cmd.OutOrStdout(), "  By:      %s\n", reviewer)
+	if body != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Body:    %s\n", truncate(body, 80))
+	}
+
+	return nil
+}
+
+// ── PR Merge ─────────────────────────────────────────────────────────
+
+func newGitHubPRMergeCmd() *cobra.Command {
+	var method string
+	var deleteBranch bool
+
+	cmd := &cobra.Command{
+		Use:   "pr merge <pr-number>",
+		Short: "Merge a pull request",
+		Long: `Merge a pull request with the specified method.
+
+Merge methods: merge (default), squash, rebase
+Use --delete-branch to delete the remote branch after merge.
+
+Examples:
+  got github pr merge 42
+  got github pr merge 42 --method squash
+  got github pr merge 42 --method rebase --delete-branch`,
+
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGitHubPRMerge(cmd, args[0], method, deleteBranch)
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.StringVar(&method, "method", "merge", "Merge method: merge, squash, or rebase")
+	flags.BoolVar(&deleteBranch, "delete-branch", false, "Delete the remote branch after merge")
+
+	return cmd
+}
+
+func runGitHubPRMerge(cmd *cobra.Command, arg, method string, deleteBranch bool) error {
+	prNum, err := parseIntArg(arg, "PR number")
+	if err != nil {
+		return err
+	}
+
+	// Map method to GitHub merge type.
+	var mergeMethod string
+	switch method {
+	case "merge":
+		mergeMethod = "merge"
+	case "squash":
+		mergeMethod = "squash"
+	case "rebase":
+		mergeMethod = "rebase"
+	default:
+		return fmt.Errorf("invalid method %q: must be merge, squash, or rebase", method)
+	}
+
+	kc, client, cfg, err := getGitHubClient(cmd)
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+	ks := kc.ks
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Check if the PR is mergeable.
+	pr, _, getErr := client.PullRequests.Get(ctx, cfg.Owner, cfg.Repo, prNum)
+	if getErr != nil {
+		return fmt.Errorf("get PR #%d: %w", prNum, getErr)
+	}
+	if pr.GetMerged() {
+		return fmt.Errorf("PR #%d is already merged", prNum)
+	}
+	if pr.GetState() == "closed" {
+		return fmt.Errorf("PR #%d is closed", prNum)
+	}
+	if pr.Mergeable != nil && !*pr.Mergeable {
+		return fmt.Errorf("PR #%d is not mergeable (has conflicts)", prNum)
+	}
+
+	// Get the PR title and body for the merge commit.
+	commitMessage := pr.GetTitle()
+	if pr.GetBody() != "" {
+		commitMessage = pr.GetTitle() + "\n\n" + pr.GetBody()
+	}
+
+	// Merge via GitHub API.
+	mergeOpts := &github.PullRequestOptions{
+		MergeMethod: mergeMethod,
+	}
+
+	mergeResult, _, mergeErr := client.PullRequests.Merge(ctx, cfg.Owner, cfg.Repo, prNum, commitMessage, mergeOpts)
+	if mergeErr != nil {
+		return fmt.Errorf("merge PR #%d: %w", prNum, mergeErr)
+	}
+
+	mergeSHA := mergeResult.GetSHA()
+
+	// Update the store.
+	if updateErr := ks.UpdatePullRequestMerge(ctx, store.UpdatePullRequestMergeParams{
+		Number:         prNum,
+		MergeCommitSHA: mergeSHA,
+	}); updateErr != nil {
+		fmt.Fprintf(cmd.ErrOrStderr(), "  warning: could not update PR merge state in store: %v\n", updateErr)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Pull request #%d merged!\n", prNum)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Method:   %s\n", method)
+	fmt.Fprintf(cmd.OutOrStdout(), "  SHA:      %s\n", mergeSHA)
+
+	// Optionally delete the remote branch.
+	if deleteBranch {
+		ref := fmt.Sprintf("heads/%s", pr.GetHead().GetRef())
+		_, delErr := client.Git.DeleteRef(ctx, cfg.Owner, cfg.Repo, ref)
+		if delErr != nil {
+			fmt.Fprintf(cmd.ErrOrStderr(), "  warning: could not delete remote branch %s: %v\n", pr.GetHead().GetRef(), delErr)
+		} else {
+			fmt.Fprintf(cmd.OutOrStdout(), "  Deleted:  %s\n", pr.GetHead().GetRef())
+		}
+	}
+
+	return nil
+}
+
+// ── PR Diff ──────────────────────────────────────────────────────────
+
+func newGitHubPRDiffCmd() *cobra.Command {
+	var stat bool
+
+	cmd := &cobra.Command{
+		Use:   "pr diff <pr-number>",
+		Short: "Show the diff of a pull request",
+		Long: `Display the unified diff of a pull request.
+
+By default shows the full diff. Use --stat for a file-level summary.
+If 'less' is available, output is paged automatically.
+
+Examples:
+  got github pr diff 42
+  got github pr diff 42 --stat`,
+
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGitHubPRDiff(cmd, args[0], stat)
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.BoolVar(&stat, "stat", false, "Show file-level diff summary instead of full diff")
+
+	return cmd
+}
+
+func runGitHubPRDiff(cmd *cobra.Command, arg string, stat bool) error {
+	prNum, err := parseIntArg(arg, "PR number")
+	if err != nil {
+		return err
+	}
+
+	kc, err := openKnowledgeStore()
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+
+	// Fetch the diff using the raw GitHub API.
+	// We use a raw HTTP request to get the actual diff content.
+	cfg, cfgErr := kc.ks.GetGitHubConfig(cmd.Context())
+	if cfgErr != nil || cfg == nil || cfg.Token == "" {
+		return fmt.Errorf("GitHub not configured. Run 'got github auth' first")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if stat {
+		// Use go-github to list files.
+		client := github.NewClient(nil).WithAuthToken(cfg.Token)
+		opts := &github.ListOptions{PerPage: 100}
+		files, _, listErr := client.PullRequests.ListFiles(ctx, cfg.Owner, cfg.Repo, prNum, opts)
+		if listErr != nil {
+			return fmt.Errorf("list PR files: %w", listErr)
+		}
+
+		if len(files) == 0 {
+			fmt.Fprintln(cmd.OutOrStdout(), "No files changed.")
+			return nil
+		}
+
+		fmt.Fprintf(cmd.OutOrStdout(), "Files changed in PR #%d:\n\n", prNum)
+		w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
+		fmt.Fprintln(w, "FILE\tADDITIONS\tDELETIONS\tCHANGES")
+		var totalAdd, totalDel, totalChanges int
+		for _, f := range files {
+			add := f.GetAdditions()
+			del := f.GetDeletions()
+			changes := f.GetChanges()
+			fmt.Fprintf(w, "%s\t+%d\t-%d\t%d\n", f.GetFilename(), add, del, changes)
+			totalAdd += add
+			totalDel += del
+			totalChanges += changes
+		}
+		w.Flush()
+		fmt.Fprintf(cmd.OutOrStdout(), "\nTotal: %d files, +%d, -%d, %d changes\n", len(files), totalAdd, totalDel, totalChanges)
+	} else {
+		// Fetch the raw diff using the media-type header.
+		req, reqErr := http.NewRequestWithContext(ctx, "GET",
+			fmt.Sprintf("https://api.github.com/repos/%s/%s/pulls/%d", cfg.Owner, cfg.Repo, prNum), nil)
+		if reqErr != nil {
+			return fmt.Errorf("create request: %w", reqErr)
+		}
+		req.Header.Set("Authorization", "Bearer "+cfg.Token)
+		req.Header.Set("Accept", "application/vnd.github.v3.diff")
+
+		resp, doErr := http.DefaultClient.Do(req)
+		if doErr != nil {
+			return fmt.Errorf("fetch diff: %w", doErr)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != 200 {
+			return fmt.Errorf("fetch diff: HTTP %d", resp.StatusCode)
+		}
+
+		diffBytes, readErr := io.ReadAll(resp.Body)
+		if readErr != nil {
+			return fmt.Errorf("read diff: %w", readErr)
+		}
+
+		diffStr := string(diffBytes)
+		if diffStr == "" {
+			fmt.Fprintln(cmd.OutOrStdout(), "No diff available (PR may have no changes).")
+			return nil
+		}
+
+		// Try to page with 'less' if available.
+		if pager := os.Getenv("PAGER"); pager != "" {
+			pageCmd := exec.Command("sh", "-c", fmt.Sprintf("%s %s", pager, "/dev/stdin"))
+			pageCmd.Stdin = strings.NewReader(diffStr)
+			pageCmd.Stdout = cmd.OutOrStdout()
+			pageCmd.Stderr = cmd.ErrOrStderr()
+			_ = pageCmd.Run()
+		} else if _, lessErr := exec.LookPath("less"); lessErr == nil {
+			lessCmd := exec.Command("less", "-R")
+			lessCmd.Stdin = strings.NewReader(diffStr)
+			lessCmd.Stdout = cmd.OutOrStdout()
+			lessCmd.Stderr = cmd.ErrOrStderr()
+			_ = lessCmd.Run()
+		} else {
+			fmt.Fprint(cmd.OutOrStdout(), diffStr)
 		}
 	}
 

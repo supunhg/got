@@ -241,11 +241,13 @@ type PullRequest struct {
 	ID          string `json:"id"`
 	Number      int    `json:"number"`
 	Title       string `json:"title"`
-	State       string `json:"state"`          // open, closed, merged
-	Branch      string `json:"branch"`         // head branch
-	Base        string `json:"base"`            // target branch
+	State       string `json:"state"`              // open, closed, merged
+	Branch      string `json:"branch"`             // head branch
+	Base        string `json:"base"`                // target branch
 	URL         string `json:"url,omitempty"`
 	WorkspaceID string `json:"workspace_id,omitempty"`
+	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
+	MergedAt    int64  `json:"merged_at,omitempty"`
 	CreatedAt   int64  `json:"created_at"`
 	UpdatedAt   int64  `json:"updated_at"`
 }
@@ -281,6 +283,32 @@ type CreatePullRequestParams struct {
 	Base        string
 	URL         string
 	WorkspaceID string
+}
+
+// PRReview represents a GitHub pull request review recorded in GOT.
+type PRReview struct {
+	ID           string `json:"id"`
+	PRNumber     int    `json:"pr_number"`
+	Reviewer     string `json:"reviewer"`
+	State        string `json:"state"`       // APPROVED, CHANGES_REQUESTED, COMMENTED
+	Body         string `json:"body,omitempty"`
+	WorkspaceID  string `json:"workspace_id,omitempty"`
+	SubmittedAt  int64  `json:"submitted_at"`
+}
+
+// CreateReviewParams holds fields for recording a review in GOT.
+type CreateReviewParams struct {
+	PRNumber     int
+	Reviewer     string
+	State        string
+	Body         string
+	WorkspaceID  string
+}
+
+// UpdatePullRequestMergeParams holds fields for updating a PR's merge state.
+type UpdatePullRequestMergeParams struct {
+	Number         int
+	MergeCommitSHA string
 }
 
 // CreateIssueParams holds fields for recording an issue in GOT.
@@ -1889,8 +1917,8 @@ func (ks *KnowledgeStore) CreatePullRequest(ctx context.Context, params CreatePu
 	}
 
 	_, err := ks.db.ExecContext(ctx, `
-		INSERT OR IGNORE INTO pull_requests (id, number, title, state, branch, base, url, workspace_id, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT OR IGNORE INTO pull_requests (id, number, title, state, branch, base, url, workspace_id, merge_commit_sha, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?)`,
 		pr.ID, pr.Number, pr.Title, pr.State, pr.Branch, pr.Base, pr.URL,
 		nullableWorkspaceID(params.WorkspaceID), pr.CreatedAt, pr.UpdatedAt)
 	if err != nil {
@@ -1917,12 +1945,12 @@ func (ks *KnowledgeStore) ListPullRequests(ctx context.Context, workspaceID stri
 	var err error
 	if workspaceID != "" {
 		rows, err = ks.db.QueryContext(ctx, `
-			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), COALESCE(merge_commit_sha, ''), COALESCE(merged_at, 0), created_at, updated_at
 			FROM pull_requests WHERE workspace_id = ?
 			ORDER BY created_at DESC`, workspaceID)
 	} else {
 		rows, err = ks.db.QueryContext(ctx, `
-			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), COALESCE(merge_commit_sha, ''), COALESCE(merged_at, 0), created_at, updated_at
 			FROM pull_requests ORDER BY created_at DESC`)
 	}
 	if err != nil {
@@ -1937,9 +1965,9 @@ func (ks *KnowledgeStore) ListPullRequests(ctx context.Context, workspaceID stri
 func (ks *KnowledgeStore) GetPullRequestByNumber(ctx context.Context, number int) (*PullRequest, error) {
 	pr := &PullRequest{}
 	err := ks.db.QueryRowContext(ctx, `
-		SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+		SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), COALESCE(merge_commit_sha, ''), COALESCE(merged_at, 0), created_at, updated_at
 		FROM pull_requests WHERE number = ?`, number,
-	).Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.CreatedAt, &pr.UpdatedAt)
+	).Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.MergeCommitSHA, &pr.MergedAt, &pr.CreatedAt, &pr.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, fmt.Errorf("pull request #%d not found", number)
 	}
@@ -1947,9 +1975,100 @@ func (ks *KnowledgeStore) GetPullRequestByNumber(ctx context.Context, number int
 		return nil, fmt.Errorf("get pull request: %w", err)
 	}
 	return pr, nil
+}	// ── PR Review CRUD ─────────────────────────────────────────────────
+
+// CreateReview records a pull request review in the store.
+func (ks *KnowledgeStore) CreateReview(ctx context.Context, params CreateReviewParams) (*PRReview, error) {
+	now := nowMS()
+	id := newULID()
+
+	r := &PRReview{
+		ID:          id,
+		PRNumber:    params.PRNumber,
+		Reviewer:    params.Reviewer,
+		State:       params.State,
+		Body:        params.Body,
+		WorkspaceID: params.WorkspaceID,
+		SubmittedAt: now,
+	}
+
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT INTO pr_reviews (id, pr_number, reviewer, state, body, workspace_id, submitted_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		r.ID, r.PRNumber, r.Reviewer, r.State, r.Body,
+		nullableWorkspaceID(r.WorkspaceID), r.SubmittedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create review: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventPullRequestReviewed, events.PullRequestReviewedPayload{
+			PRNumber:    r.PRNumber,
+			Reviewer:    r.Reviewer,
+			State:       r.State,
+			Body:        r.Body,
+			SubmittedAt: now,
+		})
+	}
+
+	return r, nil
 }
 
-// ── Issue CRUD ───────────────────────────────────────────────────────
+// ListReviews returns all reviews for a given PR number.
+func (ks *KnowledgeStore) ListReviews(ctx context.Context, prNumber int) ([]PRReview, error) {
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, pr_number, reviewer, state, COALESCE(body, ''), COALESCE(workspace_id, ''), submitted_at
+		FROM pr_reviews WHERE pr_number = ?
+		ORDER BY submitted_at DESC`, prNumber)
+	if err != nil {
+		return nil, fmt.Errorf("list reviews: %w", err)
+	}
+	defer rows.Close()
+
+	return scanReviews(rows)
+}
+
+// UpdatePullRequestMerge sets merge fields on a pull request after a merge.
+func (ks *KnowledgeStore) UpdatePullRequestMerge(ctx context.Context, params UpdatePullRequestMergeParams) error {
+	now := nowMS()
+	result, err := ks.db.ExecContext(ctx, `
+		UPDATE pull_requests
+		SET state = 'merged', merge_commit_sha = ?, merged_at = ?, updated_at = ?
+		WHERE number = ?`,
+		params.MergeCommitSHA, now, now, params.Number)
+	if err != nil {
+		return fmt.Errorf("merge pull request: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("pull request #%d not found", params.Number)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventPullRequestMerged, events.PullRequestMergedPayload{
+			PRNumber:       params.Number,
+			MergeCommitSHA: params.MergeCommitSHA,
+			MergedAt:       now,
+		})
+	}
+
+	return nil
+}
+
+// scanReviews scans pr_review rows into a slice.
+func scanReviews(rows *sql.Rows) ([]PRReview, error) {
+	var reviews []PRReview
+	for rows.Next() {
+		var r PRReview
+		if err := rows.Scan(&r.ID, &r.PRNumber, &r.Reviewer, &r.State, &r.Body, &r.WorkspaceID, &r.SubmittedAt); err != nil {
+			return nil, fmt.Errorf("scan review: %w", err)
+		}
+		reviews = append(reviews, r)
+	}
+	return reviews, rows.Err()
+}
+
+	// ── Issue CRUD ───────────────────────────────────────────────────────
 
 // CreateIssue records an issue in the store.
 func (ks *KnowledgeStore) CreateIssue(ctx context.Context, params CreateIssueParams) (*Issue, error) {
@@ -2023,7 +2142,7 @@ func scanPullRequests(rows *sql.Rows) ([]PullRequest, error) {
 	var prs []PullRequest
 	for rows.Next() {
 		var pr PullRequest
-		if err := rows.Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.CreatedAt, &pr.UpdatedAt); err != nil {
+		if err := rows.Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.MergeCommitSHA, &pr.MergedAt, &pr.CreatedAt, &pr.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan pull request: %w", err)
 		}
 		prs = append(prs, pr)

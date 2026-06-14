@@ -9,8 +9,8 @@ itself rather than installed via `got plugin install`) using the same event-driv
 patterns established by the Plugin Runtime v2.
 
 The integration is designed as a reference for future platform plugins (GitLab,
-Bitbucket, etc.) and focuses on pragmatic PR/issue CRUD + linking to GOT's
-knowledge model.
+Bitbucket, etc.) and focuses on pragmatic PR/issue CRUD, review, merge, and
+linking to GOT's knowledge model.
 
 ---
 
@@ -23,7 +23,10 @@ All commands live under `got github`:
 | `got github auth` | Store GitHub token (PAT) and repo info. Tries `gh auth token` if --token omitted. Validates via API. |
 | `got github pr create --title` | Create PR from current branch. Auto-includes workspace/decision/note references in body. Links to workspace. |
 | `got github pr list` | List open PRs. Filter by `--branch`, `--workspace`. |
-| `got github pr status <number>` | Detailed PR status: title, mergeable, reviews (per-user), checks. |
+| `got github pr status <number>` | Detailed PR status: title, mergeable, reviews (GitHub + GOT), merge hint, merge commit SHA. |
+| `got github pr review <number> [action]` | Submit review: `approve`, `request-changes`, or `comment`. `--body` required for request-changes/comment. Records in store, emits `PullRequestReviewed` event. |
+| `got github pr merge <number>` | Merge PR with `--method` (merge/squash/rebase). `--delete-branch` to delete remote branch after merge. Emits `PullRequestMerged` event. |
+| `got github pr diff <number>` | Show unified diff of PR. `--stat` for file-level summary (additions/deletions/changes per file). Paged with `less` if available. |
 | `got github issue create --title` | Create issue. Supports `--labels`, `--assignee`, `--workspace`. |
 | `got github issue list` | List open issues. Filter by `--workspace`. |
 | `got github link pr|issue <number>` | Manually link a workspace to a PR or issue. |
@@ -63,6 +66,8 @@ All commands live under `got github`:
 | `base` | TEXT | Target branch name |
 | `url` | TEXT | GitHub HTML URL |
 | `workspace_id` | TEXT | Optional link to workspaces.name |
+| `merge_commit_sha` | TEXT | SHA of the merge commit (populated on merge) |
+| `merged_at` | INTEGER | Unix ms when merged |
 | `created_at` / `updated_at` | INTEGER | Unix ms |
 
 ### `issues` table
@@ -78,20 +83,35 @@ All commands live under `got github`:
 | `workspace_id` | TEXT | Optional link to workspaces.name |
 | `created_at` / `updated_at` | INTEGER | Unix ms |
 
+### `pr_reviews` table (migration 0009)
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | TEXT (ULID) | Primary key |
+| `pr_number` | INTEGER | FK to pull_requests.number |
+| `reviewer` | TEXT | GitHub login of reviewer |
+| `state` | TEXT | `APPROVED`, `CHANGES_REQUESTED`, `COMMENTED` |
+| `body` | TEXT | Review body text |
+| `workspace_id` | TEXT | Optional link to workspaces.name |
+| `submitted_at` | INTEGER | Unix ms |
+
 ---
 
 ## Event Integration
 
-Two new event types are published via the shared event bus:
+Five event types are published via the shared event bus:
 
 | Event | Constant | Payload | When |
 |-------|----------|---------|------|
 | `PullRequestCreated` | `events.EventPullRequestCreated` | `PullRequestCreatedPayload` | After a PR is recorded in the store |
 | `IssueCreated` | `events.EventIssueCreated` | `IssueCreatedPayload` | After an issue is recorded |
+| `PullRequestReviewed` | `events.EventPullRequestReviewed` | `PullRequestReviewedPayload` | After a review is recorded |
+| `PullRequestMerged` | `events.EventPullRequestMerged` | `PullRequestMergedPayload` | After a PR merge is recorded |
 
-These events are published by `KnowledgeStore.CreatePullRequest()` and
-`KnowledgeStore.CreateIssue()` respectively. Plugins and other in-process
-consumers can subscribe to them.
+Events are published by `KnowledgeStore.CreatePullRequest()`,
+`KnowledgeStore.CreateIssue()`, `KnowledgeStore.CreateReview()`, and
+`KnowledgeStore.UpdatePullRequestMerge()` respectively. Plugins and other
+in-process consumers can subscribe to them.
 
 ---
 
@@ -110,11 +130,12 @@ consumers can subscribe to them.
 
 | File | Purpose |
 |------|---------|
-| `internal/cli/github.go` | All CLI command implementations (auth, PR, issue, link) |
-| `internal/cli/github_test.go` | Tests with store-level mock server (6 tests) |
-| `internal/store/knowledge.go` | PullRequest, Issue, GitHubConfig types + CRUD methods |
+| `internal/cli/github.go` | All CLI command implementations (auth, PR create/list/status/review/merge/diff, issue, link) |
+| `internal/cli/github_test.go` | Tests with store-level mock server (12 tests) |
+| `internal/store/knowledge.go` | PullRequest, Issue, PRReview, GitHubConfig types + CRUD methods + merge tracking |
 | `internal/store/migrations/0008_github.sql` | Schema for github_config, pull_requests, issues |
-| `internal/events/event.go` | PullRequestCreatedPayload, IssueCreatedPayload |
+| `internal/store/migrations/0009_pr_reviews.sql` | Schema for pr_reviews table + merge columns |
+| `internal/events/event.go` | All GitHub event payloads (4 event types) |
 
 ---
 
@@ -128,16 +149,33 @@ The test file covers:
 - **`TestGitHubEvents`**: Verify `PullRequestCreated` and `IssueCreated` events fire
 - **`TestGitHubLink`**: Create PR linked to workspace, verify workspace filter
 - **`TestGitHubAuthFlow`**: Verify nil config before any auth
+- **`TestGitHubReviewCRUD`**: Create review, list reviews
+- **`TestGitHubReviewEvents`**: Verify `PullRequestReviewed` event fires
+- **`TestGitHubMerge`**: Update PR merge state, verify merge_commit_sha and merged_at
+- **`TestGitHubMergeEvents`**: Verify `PullRequestMerged` event fires
+- **`TestGitHubPRState`**: Verify PR with merge columns works correctly
 
 Tests use `httptest` for mock HTTP setup and test directly through the store
 layer, avoiding real network calls.
 
 ---
 
+## Review & Merge Workflow
+
+1. User creates a PR: `got github pr create --title "..." --workspace auth`
+2. PR is recorded in the store with workspace link
+3. Team members review: `got github pr review 42 approve --body "LGTM!"`
+4. Review is recorded in `pr_reviews` table, workspace activity updated
+5. PR status shows review history: `got github pr status 42`
+6. PR is merged: `got github pr merge 42 --method squash --delete-branch`
+7. PR state updated to `merged`, merge commit SHA recorded, event published
+8. Workspace show/status reflects merged state
+
+---
+
 ## Future Plans
 
 - CI/CD status checks in `got github pr status`
-- PR review submission (approve/request changes)
 - Webhook server for real-time event updates from GitHub
 - GitHub Issues project/timeline integration
 - GitLab/Bitbucket platform plugins following the same pattern

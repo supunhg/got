@@ -411,10 +411,14 @@ func outputWorkspaceShow(cmd *cobra.Command, s *store.WorkspaceStatus) error {
 		fmt.Fprintf(cmd.OutOrStdout(), "\n## Linked Pull Requests\n\n")
 		for _, pr := range s.PullRequests {
 			url := pr.URL
+			stateInfo := pr.State
+			if pr.MergeCommitSHA != "" && pr.State == "merged" {
+				stateInfo = fmt.Sprintf("merged (%s)", pr.MergeCommitSHA[:8])
+			}
 			if url != "" {
-				fmt.Fprintf(cmd.OutOrStdout(), "- [#%d %s](%s) (%s)\n", pr.Number, pr.Title, url, pr.State)
+				fmt.Fprintf(cmd.OutOrStdout(), "- [#%d %s](%s) (%s)\n", pr.Number, pr.Title, url, stateInfo)
 			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "- #%d %s (%s)\n", pr.Number, pr.Title, pr.State)
+				fmt.Fprintf(cmd.OutOrStdout(), "- #%d %s (%s)\n", pr.Number, pr.Title, stateInfo)
 			}
 		}
 	}

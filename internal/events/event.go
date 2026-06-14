@@ -68,8 +68,10 @@ const (
 	EventOnboardingCompleted    = "OnboardingCompleted"
 
 	// GitHub integration
-	EventPullRequestCreated = "PullRequestCreated"
-	EventIssueCreated       = "IssueCreated"
+	EventPullRequestCreated  = "PullRequestCreated"
+	EventIssueCreated        = "IssueCreated"
+	EventPullRequestReviewed = "PullRequestReviewed"
+	EventPullRequestMerged   = "PullRequestMerged"
 )
 
 // ── Typed payloads ──────────────────────────────────────────────────
@@ -296,4 +298,20 @@ type IssueCreatedPayload struct {
 	Labels    []string `json:"labels,omitempty"`
 	URL       string   `json:"url,omitempty"`
 	CreatedAt int64    `json:"created_at"`
+}
+
+// PullRequestReviewedPayload is published when a review is submitted.
+type PullRequestReviewedPayload struct {
+	PRNumber    int    `json:"pr_number"`
+	Reviewer    string `json:"reviewer"`
+	State       string `json:"state"`      // APPROVED, CHANGES_REQUESTED, COMMENTED
+	Body        string `json:"body,omitempty"`
+	SubmittedAt int64  `json:"submitted_at"`
+}
+
+// PullRequestMergedPayload is published when a PR is merged.
+type PullRequestMergedPayload struct {
+	PRNumber       int    `json:"pr_number"`
+	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
+	MergedAt       int64  `json:"merged_at"`
 }

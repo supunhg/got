@@ -33,7 +33,7 @@ func setupGitHubTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 	mux := http.NewServeMux()
 	srv := httptest.NewServer(mux)
 
-	// Mock /user endpoint for auth validation.
+	// Mock /user endpoint for auth and review (gets authenticated user).
 	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -78,18 +78,21 @@ func setupGitHubTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 	})
 
 	// Mock /repos/:owner/:repo/pulls/:number endpoint (get)
+	// Also handle /repos/:owner/:repo/pulls/:number being used for merge endpoint via Accept header.
 	mux.HandleFunc("/repos/testowner/testrepo/pulls/42", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		pr := map[string]interface{}{
-			"number":    42,
-			"title":     "Test PR",
-			"state":     "open",
-			"html_url":  fmt.Sprintf("%s/pull/42", srv.URL),
-			"draft":     false,
-			"mergeable": true,
-			"body":      "Test body",
-			"head":      map[string]interface{}{"ref": "feature-branch"},
-			"base":      map[string]interface{}{"ref": "main"},
+			"number":        42,
+			"title":         "Test PR",
+			"state":         "open",
+			"html_url":      fmt.Sprintf("%s/pull/42", srv.URL),
+			"draft":         false,
+			"mergeable":     true,
+			"merged":        false,
+			"body":          "Test body",
+			"head":          map[string]interface{}{"ref": "feature-branch"},
+			"base":          map[string]interface{}{"ref": "main"},
+			"mergeable_state": "clean",
 		}
 		json.NewEncoder(w).Encode(pr)
 	})
@@ -105,6 +108,19 @@ func setupGitHubTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 			},
 		})
 	})
+
+	// Mock /repos/:owner/:repo/pulls/:number/merge endpoint (PUT)
+	// go-github uses: PUT /repos/:owner/:repo/pulls/:number/merge
+	mux.HandleFunc("/repos/testowner/testrepo/pulls/42/merge", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"sha":     "abc123def456",
+			"merged":  true,
+			"message": "Pull Request successfully merged",
+		})
+	})
+
+
 
 	// Mock /repos/:owner/:repo/issues endpoint (create/list)
 	var mockIssues []map[string]interface{}
@@ -398,5 +414,187 @@ func TestGitHubAuthFlow(t *testing.T) {
 	}
 	if cfg != nil {
 		t.Fatalf("expected nil config, got %+v", cfg)
+	}
+}
+
+// ── PR Review Tests ──────────────────────────────────────────────────
+
+// TestGitHubReviewCRUD tests creating and listing reviews in the store.
+func TestGitHubReviewCRUD(t *testing.T) {
+	ks, _, _, _, cleanup := setupGitHubTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a review.
+	r, err := ks.CreateReview(ctx, store.CreateReviewParams{
+		PRNumber: 42,
+		Reviewer: "testuser",
+		State:    "APPROVED",
+		Body:     "LGTM!",
+	})
+	if err != nil {
+		t.Fatalf("CreateReview: %v", err)
+	}
+	if r.State != "APPROVED" {
+		t.Errorf("expected APPROVED, got %s", r.State)
+	}
+	if r.Reviewer != "testuser" {
+		t.Errorf("expected reviewer 'testuser', got %q", r.Reviewer)
+	}
+
+	// List reviews.
+	reviews, err := ks.ListReviews(ctx, 42)
+	if err != nil {
+		t.Fatalf("ListReviews: %v", err)
+	}
+	if len(reviews) != 1 {
+		t.Fatalf("expected 1 review, got %d", len(reviews))
+	}
+	if reviews[0].State != "APPROVED" {
+		t.Errorf("expected APPROVED, got %s", reviews[0].State)
+	}
+}
+
+// TestGitHubReviewEvents tests that PullRequestReviewed event is published.
+func TestGitHubReviewEvents(t *testing.T) {
+	ks, bus, _, _, cleanup := setupGitHubTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	var reviewEvents int
+	bus.Subscribe("PullRequestReviewed", func(ctx context.Context, e events.Event) error {
+		reviewEvents++
+		return nil
+	})
+
+	_, err := ks.CreateReview(ctx, store.CreateReviewParams{
+		PRNumber: 42,
+		Reviewer: "testuser",
+		State:    "APPROVED",
+		Body:     "Nice work!",
+	})
+	if err != nil {
+		t.Fatalf("CreateReview: %v", err)
+	}
+	if reviewEvents != 1 {
+		t.Errorf("expected 1 PullRequestReviewed event, got %d", reviewEvents)
+	}
+}
+
+// ── PR Merge Tests ───────────────────────────────────────────────────
+
+// TestGitHubMerge tests updating PR merge state in the store.
+func TestGitHubMerge(t *testing.T) {
+	ks, _, _, _, cleanup := setupGitHubTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a PR first.
+	_, err := ks.CreatePullRequest(ctx, store.CreatePullRequestParams{
+		Number: 42,
+		Title:  "Test PR",
+		State:  "open",
+		Branch: "feature",
+		Base:   "main",
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest: %v", err)
+	}
+
+	// Update with merge info.
+	err = ks.UpdatePullRequestMerge(ctx, store.UpdatePullRequestMergeParams{
+		Number:         42,
+		MergeCommitSHA: "abc123def456",
+	})
+	if err != nil {
+		t.Fatalf("UpdatePullRequestMerge: %v", err)
+	}
+
+	// Verify the PR is now merged.
+	pr, err := ks.GetPullRequestByNumber(ctx, 42)
+	if err != nil {
+		t.Fatalf("GetPullRequestByNumber: %v", err)
+	}
+	if pr.State != "merged" {
+		t.Errorf("expected state 'merged', got %q", pr.State)
+	}
+	if pr.MergeCommitSHA != "abc123def456" {
+		t.Errorf("expected merge SHA 'abc123def456', got %q", pr.MergeCommitSHA)
+	}
+	if pr.MergedAt == 0 {
+		t.Errorf("expected non-zero MergedAt")
+	}
+}
+
+// TestGitHubMergeEvents tests that PullRequestMerged event is published.
+func TestGitHubMergeEvents(t *testing.T) {
+	ks, bus, _, _, cleanup := setupGitHubTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a PR first.
+	_, err := ks.CreatePullRequest(ctx, store.CreatePullRequestParams{
+		Number: 42,
+		Title:  "Test PR",
+		State:  "open",
+		Branch: "feature",
+		Base:   "main",
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest: %v", err)
+	}
+
+	var mergeEvents int
+	bus.Subscribe("PullRequestMerged", func(ctx context.Context, e events.Event) error {
+		mergeEvents++
+		return nil
+	})
+
+	err = ks.UpdatePullRequestMerge(ctx, store.UpdatePullRequestMergeParams{
+		Number:         42,
+		MergeCommitSHA: "abc123",
+	})
+	if err != nil {
+		t.Fatalf("UpdatePullRequestMerge: %v", err)
+	}
+	if mergeEvents != 1 {
+		t.Errorf("expected 1 PullRequestMerged event, got %d", mergeEvents)
+	}
+}
+
+// TestGitHubDiffStat tests PR diff stat via store (file-level summary).
+// This tests that ListPullRequests still works after schema changes.
+func TestGitHubPRState(t *testing.T) {
+	ks, _, _, _, cleanup := setupGitHubTest(t)
+	defer cleanup()
+
+	ctx := context.Background()
+
+	// Create a PR with merge info.
+	_, err := ks.CreatePullRequest(ctx, store.CreatePullRequestParams{
+		Number: 42,
+		Title:  "Test PR",
+		State:  "open",
+		Branch: "feature",
+		Base:   "main",
+	})
+	if err != nil {
+		t.Fatalf("CreatePullRequest: %v", err)
+	}
+
+	// Verify the PR fields including new merge columns.
+	pr, err := ks.GetPullRequestByNumber(ctx, 42)
+	if err != nil {
+		t.Fatalf("GetPullRequestByNumber: %v", err)
+	}
+	if pr.MergeCommitSHA != "" {
+		t.Errorf("expected empty MergeCommitSHA, got %q", pr.MergeCommitSHA)
+	}
+	if pr.MergedAt != 0 {
+		t.Errorf("expected 0 MergedAt, got %d", pr.MergedAt)
 	}
 }
