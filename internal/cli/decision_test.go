@@ -29,7 +29,7 @@ func testCLIEnv(t *testing.T) (string, *store.Store, func()) {
 
 	// Create .got/ directory.
 	gotDir := filepath.Join(dir, ".got")
-	if err := os.MkdirAll(gotDir, 0755); err != nil {
+	if err := os.MkdirAll(gotDir, 0o755); err != nil {
 		os.RemoveAll(dir)
 		t.Fatalf("MkdirAll .got: %v", err)
 	}
@@ -102,10 +102,10 @@ func TestDecisionDelete_Success(t *testing.T) {
 
 	// Create the body file on disk so we can verify cleanup.
 	bodyPath := filepath.Join(dir, ".got", d.BodyPath)
-	if err := os.MkdirAll(filepath.Dir(bodyPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(bodyPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll body dir: %v", err)
 	}
-	if err := os.WriteFile(bodyPath, []byte("# "+d.Title+"\n\nBody content."), 0644); err != nil {
+	if err := os.WriteFile(bodyPath, []byte("# "+d.Title+"\n\nBody content."), 0o644); err != nil {
 		t.Fatalf("WriteFile body: %v", err)
 	}
 

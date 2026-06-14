@@ -8,13 +8,13 @@ import (
 
 // Snapshot represents a recovery point before a destructive Git operation.
 type Snapshot struct {
-	ID         string `json:"id"`
-	CreatedAt  int64  `json:"created_at"`
-	Reason     string `json:"reason"`
-	Ref        string `json:"ref"`
-	ReflogSel  string `json:"reflog_sel,omitempty"`
-	StashRef   string `json:"stash_ref,omitempty"`
-	Metadata   string `json:"metadata,omitempty"`
+	ID        string `json:"id"`
+	CreatedAt int64  `json:"created_at"`
+	Reason    string `json:"reason"`
+	Ref       string `json:"ref"`
+	ReflogSel string `json:"reflog_sel,omitempty"`
+	StashRef  string `json:"stash_ref,omitempty"`
+	Metadata  string `json:"metadata,omitempty"`
 }
 
 // CreateSnapshotParams holds fields for creating a snapshot.
@@ -53,7 +53,8 @@ func (ks *KnowledgeStore) CreateSnapshot(ctx context.Context, params CreateSnaps
 		Metadata:  metadata,
 	}
 
-	_, err := ks.db.ExecContext(ctx, `
+	_, err := ks.db.ExecContext(
+		ctx, `
 		INSERT INTO snapshots (id, created_at, reason, ref, reflog_sel, stash_ref, metadata)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		s.ID, s.CreatedAt, s.Reason, s.Ref, s.ReflogSel, s.StashRef, s.Metadata,
@@ -68,7 +69,8 @@ func (ks *KnowledgeStore) CreateSnapshot(ctx context.Context, params CreateSnaps
 // GetSnapshot retrieves a snapshot by ID.
 func (ks *KnowledgeStore) GetSnapshot(ctx context.Context, id string) (*Snapshot, error) {
 	s := &Snapshot{}
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, created_at, reason, ref, COALESCE(reflog_sel, ''),
 		       COALESCE(stash_ref, ''), COALESCE(metadata, '{}')
 		FROM snapshots WHERE id = ?`, id,

@@ -32,11 +32,12 @@ type Store struct {
 // pending migrations. The database is opened in WAL mode with
 // synchronous=NORMAL for a good balance of performance and durability.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open("sqlite", path+
-		"?_pragma=journal_mode(WAL)"+
-		"&_pragma=synchronous(NORMAL)"+
-		"&_pragma=busy_timeout(5000)"+
-		"&_pragma=foreign_keys(1)",
+	db, err := sql.Open(
+		"sqlite", path+
+			"?_pragma=journal_mode(WAL)"+
+			"&_pragma=synchronous(NORMAL)"+
+			"&_pragma=busy_timeout(5000)"+
+			"&_pragma=foreign_keys(1)",
 	)
 	if err != nil {
 		return nil, fmt.Errorf("store: open %s: %w", path, err)

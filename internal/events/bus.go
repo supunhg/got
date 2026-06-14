@@ -29,10 +29,10 @@ type subscription struct {
 // For the v0.4 Knowledge Engine this is sufficient. A future version may
 // add async dispatch, timeouts, handler worker pools, or delivery guarantees.
 type Bus struct {
-	mu      sync.RWMutex
-	subs    map[string][]subscription
-	nextID  uint64
-	closed  bool
+	mu     sync.RWMutex
+	subs   map[string][]subscription
+	nextID uint64
+	closed bool
 }
 
 // New creates and returns an initialised, ready-to-use Bus.

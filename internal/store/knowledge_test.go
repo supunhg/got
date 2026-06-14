@@ -713,9 +713,9 @@ func TestSearchDecisionsAndNotes(t *testing.T) {
 		Decision: "Use SQLite with the modernc.org driver",
 	})
 	ks.CreateDecision(ctx, CreateDecisionParams{
-		Title:    "Adopt Bubbletea for TUI",
-		Context:  "We need a terminal UI framework",
-		Decision: "Use Bubbletea for the interactive CLI",
+		Title:        "Adopt Bubbletea for TUI",
+		Context:      "We need a terminal UI framework",
+		Decision:     "Use Bubbletea for the interactive CLI",
 		Alternatives: "Considered Huh? and survey",
 	})
 

@@ -36,7 +36,7 @@ func newTestRepo(t *testing.T) string {
 
 	// Create initial commit.
 	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("# Test\n"), 0644); err != nil {
+	if err := os.WriteFile(readme, []byte("# Test\n"), 0o644); err != nil {
 		os.RemoveAll(dir)
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestGetStatus_Dirty(t *testing.T) {
 	defer os.RemoveAll(repoPath)
 
 	// Create an untracked file.
-	if err := os.WriteFile(filepath.Join(repoPath, "new.txt"), []byte("hello"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "new.txt"), []byte("hello"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -230,7 +230,7 @@ func TestGetCommitHistory(t *testing.T) {
 	adapter.OpenRepository(ctx, repoPath)
 
 	// Make another commit.
-	if err := os.WriteFile(filepath.Join(repoPath, "second.txt"), []byte("second"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "second.txt"), []byte("second"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	exec.Command("git", "-C", repoPath, "add", ".").Run()
@@ -308,7 +308,7 @@ func TestGetGraph(t *testing.T) {
 	adapter.OpenRepository(ctx, repoPath)
 
 	// Make another commit so we have a graph with parent relationships.
-	if err := os.WriteFile(filepath.Join(repoPath, "second.txt"), []byte("second"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "second.txt"), []byte("second"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	exec.Command("git", "-C", repoPath, "add", ".").Run()
@@ -335,7 +335,7 @@ func TestCreateCommit(t *testing.T) {
 	defer os.RemoveAll(repoPath)
 
 	// Modify a file and stage it so there's something to commit.
-	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Updated\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "README.md"), []byte("# Updated\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 

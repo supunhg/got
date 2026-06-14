@@ -35,7 +35,7 @@ func newTestRepoIntegration(t *testing.T) string {
 	}
 
 	readme := filepath.Join(dir, "README.md")
-	if err := os.WriteFile(readme, []byte("# Test\n"), 0644); err != nil {
+	if err := os.WriteFile(readme, []byte("# Test\n"), 0o644); err != nil {
 		os.RemoveAll(dir)
 		t.Fatalf("WriteFile: %v", err)
 	}
@@ -63,7 +63,7 @@ func setupWorkspaceEnv(t *testing.T) (string, *store.KnowledgeStore, *git.ExecAd
 
 	// Create .got directory and database.
 	gotDir := filepath.Join(repoPath, ".got")
-	os.MkdirAll(gotDir, 0755)
+	os.MkdirAll(gotDir, 0o755)
 	dbPath := filepath.Join(gotDir, "got.db")
 
 	s, err := store.Open(dbPath)
@@ -120,7 +120,7 @@ func TestWorkspaceCommitShowsInStatus(t *testing.T) {
 	}
 
 	// Create a file and commit.
-	if err := os.WriteFile(filepath.Join(repoPath, "oauth.go"), []byte("package oauth\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "oauth.go"), []byte("package oauth\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	adapter.Run(ctx, "add", "oauth.go")
@@ -233,7 +233,7 @@ func TestWorkspaceAddFileValidatesNonExistent(t *testing.T) {
 	}
 
 	// Create a real file and verify validation passes.
-	if err := os.WriteFile(filepath.Join(repoPath, "real-file.go"), []byte("package main\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "real-file.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
@@ -259,7 +259,7 @@ func TestEventDrivenWorkspaceUpdate(t *testing.T) {
 	}
 
 	// Make a commit on main.
-	if err := os.WriteFile(filepath.Join(repoPath, "feature.go"), []byte("package main\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(repoPath, "feature.go"), []byte("package main\n"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 	adapter.Run(ctx, "add", "feature.go")

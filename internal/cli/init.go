@@ -97,7 +97,7 @@ func runInit(cmd *cobra.Command, args []string, force bool) error {
 	}
 
 	for _, d := range subdirs {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0o755); err != nil {
 			return fmt.Errorf("init: create %s: %w", d, err)
 		}
 	}
@@ -129,7 +129,7 @@ ai:
   provider: heuristic
 `, projectName)
 
-	if err := os.WriteFile(gotYmlPath, []byte(gotYml), 0644); err != nil {
+	if err := os.WriteFile(gotYmlPath, []byte(gotYml), 0o644); err != nil {
 		return fmt.Errorf("init: write got.yml: %w", err)
 	}
 
@@ -145,7 +145,7 @@ ai:
 
 	if !strings.Contains(string(gitignoreContent), ".got/") {
 		gitignoreContent = append(gitignoreContent, []byte(gitignoreEntry)...)
-		if err := os.WriteFile(gitignorePath, gitignoreContent, 0644); err != nil {
+		if err := os.WriteFile(gitignorePath, gitignoreContent, 0o644); err != nil {
 			return fmt.Errorf("init: update .gitignore: %w", err)
 		}
 	}
@@ -183,7 +183,7 @@ func initGitRepo(dir string) error {
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
 		projectName := filepath.Base(dir)
 		readmeContent := fmt.Sprintf("# %s\n\nInitialized by GOT.\n", projectName)
-		if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+		if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil {
 			return fmt.Errorf("write README.md: %w", err)
 		}
 

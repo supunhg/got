@@ -18,18 +18,18 @@ import (
 
 // Decision represents an architectural decision record (ADR).
 type Decision struct {
-	ID            string  `json:"id"`
-	CreatedAt     int64   `json:"created_at"`
-	UpdatedAt     int64   `json:"updated_at"`
-	Status        string  `json:"status"`
-	Title         string  `json:"title"`
-	Context       string  `json:"context"`
-	Decision      string  `json:"decision"`
-	Alternatives  string  `json:"alternatives"`
-	Consequences  string  `json:"consequences"`
-	BodyPath      string  `json:"body_path"`
-	WorkspaceID   *string `json:"workspace_id,omitempty"`
-	SupersedesID  *string `json:"supersedes_id,omitempty"`
+	ID           string  `json:"id"`
+	CreatedAt    int64   `json:"created_at"`
+	UpdatedAt    int64   `json:"updated_at"`
+	Status       string  `json:"status"`
+	Title        string  `json:"title"`
+	Context      string  `json:"context"`
+	Decision     string  `json:"decision"`
+	Alternatives string  `json:"alternatives"`
+	Consequences string  `json:"consequences"`
+	BodyPath     string  `json:"body_path"`
+	WorkspaceID  *string `json:"workspace_id,omitempty"`
+	SupersedesID *string `json:"supersedes_id,omitempty"`
 }
 
 // CreateDecisionParams holds the user-supplied fields for creating a decision.
@@ -47,20 +47,20 @@ type CreateDecisionParams struct {
 type DecisionFilter struct {
 	WorkspaceID *string
 	Status      *string
-	Limit       int  // 0 means use default (20)
+	Limit       int // 0 means use default (20)
 	All         bool
 }
 
 // DecisionLink represents a link between a decision and a commit, file, or workspace.
 type DecisionLink struct {
-	ID          string `json:"id"`
-	DecisionID  string `json:"decision_id"`
-	LinkType    string `json:"link_type"`
-	Target      string `json:"target"`
-	LineStart   *int   `json:"line_start,omitempty"`
-	LineEnd     *int   `json:"line_end,omitempty"`
-	Branch      string `json:"branch,omitempty"`
-	CreatedAt   int64  `json:"created_at"`
+	ID         string `json:"id"`
+	DecisionID string `json:"decision_id"`
+	LinkType   string `json:"link_type"`
+	Target     string `json:"target"`
+	LineStart  *int   `json:"line_start,omitempty"`
+	LineEnd    *int   `json:"line_end,omitempty"`
+	Branch     string `json:"branch,omitempty"`
+	CreatedAt  int64  `json:"created_at"`
 }
 
 // LinkDecisionParams holds the fields for linking a decision.
@@ -110,12 +110,12 @@ type OnboardingSession struct {
 
 // OnboardingItem represents a single item (decision, note, file) in an onboarding session.
 type OnboardingItem struct {
-	ID          string  `json:"id"`
-	SessionID   string  `json:"session_id"`
-	ItemType    string  `json:"item_type"`
-	ItemTarget  string  `json:"item_target"`
-	CoveredAt   *int64  `json:"covered_at,omitempty"`
-	Skipped     bool    `json:"skipped"`
+	ID         string `json:"id"`
+	SessionID  string `json:"session_id"`
+	ItemType   string `json:"item_type"`
+	ItemTarget string `json:"item_target"`
+	CoveredAt  *int64 `json:"covered_at,omitempty"`
+	Skipped    bool   `json:"skipped"`
 }
 
 // SearchParams specifies a full-text search across decisions and notes.
@@ -128,30 +128,30 @@ type SearchParams struct {
 
 // SearchResult is a single match returned by the Search method.
 type SearchResult struct {
-	Type        string  `json:"type"`         // "decision" or "note"
+	Type        string  `json:"type"` // "decision" or "note"
 	ID          string  `json:"id"`
-	Title       string  `json:"title"`        // decision title or note message preview
+	Title       string  `json:"title"`            // decision title or note message preview
 	Status      string  `json:"status,omitempty"` // decision status (empty for notes)
 	WorkspaceID *string `json:"workspace_id,omitempty"`
 	CreatedAt   int64   `json:"created_at"`
-	Score       int     `json:"score"`        // number of fields matched (crude relevance)
+	Score       int     `json:"score"` // number of fields matched (crude relevance)
 }
 
 // OnboardingProgress summarises the scanning progress for a session.
 type OnboardingProgress struct {
-	Session    OnboardingSession          `json:"session"`
-	ByType     map[string]TypeProgress    `json:"by_type"`
-	TotalItems int                        `json:"total_items"`
-	Covered    int                        `json:"covered"`
-	Skipped    int                        `json:"skipped"`
-	Remaining  int                        `json:"remaining"`
+	Session    OnboardingSession       `json:"session"`
+	ByType     map[string]TypeProgress `json:"by_type"`
+	TotalItems int                     `json:"total_items"`
+	Covered    int                     `json:"covered"`
+	Skipped    int                     `json:"skipped"`
+	Remaining  int                     `json:"remaining"`
 }
 
 // TypeProgress shows coverage counts for one item type.
 type TypeProgress struct {
-	Total    int `json:"total"`
-	Covered  int `json:"covered"`
-	Skipped  int `json:"skipped"`
+	Total     int `json:"total"`
+	Covered   int `json:"covered"`
+	Skipped   int `json:"skipped"`
 	Remaining int `json:"remaining"`
 }
 
@@ -162,8 +162,8 @@ type Workspace struct {
 	ID            string   `json:"id"`
 	Name          string   `json:"name"`
 	Description   string   `json:"description,omitempty"`
-	Status        string   `json:"status"`          // active | archived
-	Tags          []string `json:"tags,omitempty"`   // JSON array stored in DB
+	Status        string   `json:"status"`                    // active | archived
+	Tags          []string `json:"tags,omitempty"`            // JSON array stored in DB
 	LastCommitSHA string   `json:"last_commit_sha,omitempty"` // most recent commit SHA
 	CreatedAt     int64    `json:"created_at"`
 	UpdatedAt     int64    `json:"updated_at"`
@@ -200,16 +200,16 @@ type WorkspaceBranch struct {
 // commits, linked pull requests, linked issues, item count, and last
 // activity timestamp.
 type WorkspaceStatus struct {
-	Workspace    Workspace          `json:"workspace"`
+	Workspace    Workspace         `json:"workspace"`
 	Files        []WorkspaceFile   `json:"files"`
 	Branches     []WorkspaceBranch `json:"branches"`
-	Decisions    []Decision         `json:"decisions"`
-	Notes        []Note             `json:"notes"`
-	Commits      []WorkspaceCommit  `json:"commits,omitempty"`
+	Decisions    []Decision        `json:"decisions"`
+	Notes        []Note            `json:"notes"`
+	Commits      []WorkspaceCommit `json:"commits,omitempty"`
 	PullRequests []PullRequest     `json:"pull_requests,omitempty"`
 	Issues       []Issue           `json:"issues,omitempty"`
 	ItemCount    int               `json:"item_count"`
-	LastActivity int64              `json:"last_activity"`
+	LastActivity int64             `json:"last_activity"`
 }
 
 // CreateWorkspaceParams holds fields for creating a workspace.
@@ -231,7 +231,7 @@ type AddWorkspaceCommitParams struct {
 type UpdateWorkspaceParams struct {
 	Name        *string
 	Description *string
-	Status      *string // active | archived
+	Status      *string  // active | archived
 	Tags        []string // nil = no change, empty = clear
 }
 
@@ -239,18 +239,18 @@ type UpdateWorkspaceParams struct {
 
 // PullRequest represents a GitHub pull request tracked in GOT.
 type PullRequest struct {
-	ID          string `json:"id"`
-	Number      int    `json:"number"`
-	Title       string `json:"title"`
-	State       string `json:"state"`              // open, closed, merged
-	Branch      string `json:"branch"`             // head branch
-	Base        string `json:"base"`                // target branch
-	URL         string `json:"url,omitempty"`
-	WorkspaceID string `json:"workspace_id,omitempty"`
+	ID             string `json:"id"`
+	Number         int    `json:"number"`
+	Title          string `json:"title"`
+	State          string `json:"state"`  // open, closed, merged
+	Branch         string `json:"branch"` // head branch
+	Base           string `json:"base"`   // target branch
+	URL            string `json:"url,omitempty"`
+	WorkspaceID    string `json:"workspace_id,omitempty"`
 	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
-	MergedAt    int64  `json:"merged_at,omitempty"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	MergedAt       int64  `json:"merged_at,omitempty"`
+	CreatedAt      int64  `json:"created_at"`
+	UpdatedAt      int64  `json:"updated_at"`
 }
 
 // Issue represents a GitHub issue tracked in GOT.
@@ -258,7 +258,7 @@ type Issue struct {
 	ID          string   `json:"id"`
 	Number      int      `json:"number"`
 	Title       string   `json:"title"`
-	State       string   `json:"state"`          // open, closed
+	State       string   `json:"state"` // open, closed
 	Labels      []string `json:"labels,omitempty"`
 	URL         string   `json:"url,omitempty"`
 	WorkspaceID string   `json:"workspace_id,omitempty"`
@@ -288,22 +288,22 @@ type CreatePullRequestParams struct {
 
 // PRReview represents a GitHub pull request review recorded in GOT.
 type PRReview struct {
-	ID           string `json:"id"`
-	PRNumber     int    `json:"pr_number"`
-	Reviewer     string `json:"reviewer"`
-	State        string `json:"state"`       // APPROVED, CHANGES_REQUESTED, COMMENTED
-	Body         string `json:"body,omitempty"`
-	WorkspaceID  string `json:"workspace_id,omitempty"`
-	SubmittedAt  int64  `json:"submitted_at"`
+	ID          string `json:"id"`
+	PRNumber    int    `json:"pr_number"`
+	Reviewer    string `json:"reviewer"`
+	State       string `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED
+	Body        string `json:"body,omitempty"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	SubmittedAt int64  `json:"submitted_at"`
 }
 
 // CreateReviewParams holds fields for recording a review in GOT.
 type CreateReviewParams struct {
-	PRNumber     int
-	Reviewer     string
-	State        string
-	Body         string
-	WorkspaceID  string
+	PRNumber    int
+	Reviewer    string
+	State       string
+	Body        string
+	WorkspaceID string
 }
 
 // UpdatePullRequestMergeParams holds fields for updating a PR's merge state.
@@ -326,14 +326,14 @@ type CreateIssueParams struct {
 
 // PluginManifest represents the contents of a plugin manifest.json file.
 type PluginManifest struct {
-	Name             string                  `json:"name"`
-	Version          string                  `json:"version"`
-	Description      string                  `json:"description,omitempty"`
-	Capabilities     []string                `json:"capabilities,omitempty"`
-	Events           []string                `json:"events,omitempty"`
-	Hooks            map[string]string       `json:"hooks,omitempty"`     // event type -> command/script
-	Commands         []PluginManifestCommand `json:"commands,omitempty"`
-	RequiresGotVersion string                `json:"requires_got_version,omitempty"`
+	Name               string                  `json:"name"`
+	Version            string                  `json:"version"`
+	Description        string                  `json:"description,omitempty"`
+	Capabilities       []string                `json:"capabilities,omitempty"`
+	Events             []string                `json:"events,omitempty"`
+	Hooks              map[string]string       `json:"hooks,omitempty"` // event type -> command/script
+	Commands           []PluginManifestCommand `json:"commands,omitempty"`
+	RequiresGotVersion string                  `json:"requires_got_version,omitempty"`
 }
 
 // PluginManifestCommand describes a command the plugin exposes.
@@ -345,33 +345,33 @@ type PluginManifestCommand struct {
 
 // Plugin represents an installed plugin in the database.
 type Plugin struct {
-	ID           string         `json:"id"`
-	Name         string         `json:"name"`
-	Version      string         `json:"version"`
-	Description  string         `json:"description,omitempty"`
-	Path         string         `json:"path"`
-	Enabled      bool           `json:"enabled"`
-	ManifestJSON string         `json:"manifest_json,omitempty"`
+	ID           string          `json:"id"`
+	Name         string          `json:"name"`
+	Version      string          `json:"version"`
+	Description  string          `json:"description,omitempty"`
+	Path         string          `json:"path"`
+	Enabled      bool            `json:"enabled"`
+	ManifestJSON string          `json:"manifest_json,omitempty"`
 	Manifest     *PluginManifest `json:"manifest,omitempty"` // parsed from manifest_json on read
-	InstalledAt  int64          `json:"installed_at"`
+	InstalledAt  int64           `json:"installed_at"`
 }
 
 // ── Sentinel errors ─────────────────────────────────────────────────
 
 var (
-	ErrDecisionNotFound     = fmt.Errorf("decision not found")
-	ErrNoteNotFound         = fmt.Errorf("note not found")
-	ErrOnboardingNotFound   = fmt.Errorf("onboarding session not found")
-	ErrEmptyMessage         = fmt.Errorf("note message cannot be empty")
-	ErrInvalidStatus        = fmt.Errorf("invalid decision status")
-	ErrInvalidLinkType      = fmt.Errorf("link type must be one of: commit, file, workspace")
-	ErrDecisionAlreadyLinked = fmt.Errorf("this link already exists")
+	ErrDecisionNotFound       = fmt.Errorf("decision not found")
+	ErrNoteNotFound           = fmt.Errorf("note not found")
+	ErrOnboardingNotFound     = fmt.Errorf("onboarding session not found")
+	ErrEmptyMessage           = fmt.Errorf("note message cannot be empty")
+	ErrInvalidStatus          = fmt.Errorf("invalid decision status")
+	ErrInvalidLinkType        = fmt.Errorf("link type must be one of: commit, file, workspace")
+	ErrDecisionAlreadyLinked  = fmt.Errorf("this link already exists")
 	ErrSessionAlreadyComplete = fmt.Errorf("session is already completed")
-	ErrWorkspaceNotFound     = fmt.Errorf("workspace not found")
-	ErrDuplicateWorkspace    = fmt.Errorf("workspace with this name already exists")
-	ErrPluginNotFound        = fmt.Errorf("plugin not found")
-	ErrDuplicatePlugin       = fmt.Errorf("plugin with this name already exists")
-	ErrSnapshotNotFound      = fmt.Errorf("snapshot not found")
+	ErrWorkspaceNotFound      = fmt.Errorf("workspace not found")
+	ErrDuplicateWorkspace     = fmt.Errorf("workspace with this name already exists")
+	ErrPluginNotFound         = fmt.Errorf("plugin not found")
+	ErrDuplicatePlugin        = fmt.Errorf("plugin with this name already exists")
+	ErrSnapshotNotFound       = fmt.Errorf("snapshot not found")
 )
 
 // ── KnowledgeStore ──────────────────────────────────────────────────
@@ -421,7 +421,8 @@ func (ks *KnowledgeStore) CreateDecision(ctx context.Context, params CreateDecis
 		SupersedesID: params.SupersedesID,
 	}
 
-	_, err := ks.db.ExecContext(ctx, `
+	_, err := ks.db.ExecContext(
+		ctx, `
 		INSERT INTO decisions (id, created_at, updated_at, status, title,
 		                       context, decision, alternatives, consequences,
 		                       body_path, workspace_id, supersedes_id)
@@ -461,7 +462,8 @@ func (ks *KnowledgeStore) GetDecision(ctx context.Context, id string) (*Decision
 	d := &Decision{}
 	var workspaceID, supersedesID sql.NullString
 
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, created_at, updated_at, status, title,
 		       context, decision, alternatives, consequences,
 		       body_path, workspace_id, supersedes_id
@@ -550,7 +552,8 @@ func (ks *KnowledgeStore) LinkDecision(ctx context.Context, params LinkDecisionP
 
 	// Verify decision exists.
 	var count int
-	if err := ks.db.QueryRowContext(ctx,
+	if err := ks.db.QueryRowContext(
+		ctx,
 		"SELECT COUNT(*) FROM decisions WHERE id = ?", params.DecisionID,
 	).Scan(&count); err != nil {
 		return fmt.Errorf("check decision: %w", err)
@@ -562,7 +565,8 @@ func (ks *KnowledgeStore) LinkDecision(ctx context.Context, params LinkDecisionP
 	now := nowMS()
 	id := newULID()
 
-	_, err := ks.db.ExecContext(ctx, `
+	_, err := ks.db.ExecContext(
+		ctx, `
 		INSERT INTO decision_links (id, decision_id, link_type, target,
 		                            line_start, line_end, branch, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -588,7 +592,8 @@ func (ks *KnowledgeStore) LinkDecision(ctx context.Context, params LinkDecisionP
 
 // GetDecisionLinks returns all links for a decision.
 func (ks *KnowledgeStore) GetDecisionLinks(ctx context.Context, decisionID string) ([]DecisionLink, error) {
-	rows, err := ks.db.QueryContext(ctx, `
+	rows, err := ks.db.QueryContext(
+		ctx, `
 		SELECT id, decision_id, link_type, target,
 		       line_start, line_end, COALESCE(branch, ''), created_at
 		FROM decision_links
@@ -617,7 +622,8 @@ func (ks *KnowledgeStore) GetDecisionLinks(ctx context.Context, decisionID strin
 func (ks *KnowledgeStore) SupersedeDecision(ctx context.Context, oldID, newID string) error {
 	// Verify both decisions exist.
 	var count int
-	if err := ks.db.QueryRowContext(ctx,
+	if err := ks.db.QueryRowContext(
+		ctx,
 		"SELECT COUNT(*) FROM decisions WHERE id = ?", oldID,
 	).Scan(&count); err != nil {
 		return fmt.Errorf("check old decision: %w", err)
@@ -625,7 +631,8 @@ func (ks *KnowledgeStore) SupersedeDecision(ctx context.Context, oldID, newID st
 	if count == 0 {
 		return ErrDecisionNotFound
 	}
-	if err := ks.db.QueryRowContext(ctx,
+	if err := ks.db.QueryRowContext(
+		ctx,
 		"SELECT COUNT(*) FROM decisions WHERE id = ?", newID,
 	).Scan(&count); err != nil {
 		return fmt.Errorf("check new decision: %w", err)
@@ -641,7 +648,8 @@ func (ks *KnowledgeStore) SupersedeDecision(ctx context.Context, oldID, newID st
 // supersede performs the actual status update. Called by both CreateDecision
 // (when supersedes_id is set) and SupersedeDecision (explicit command).
 func (ks *KnowledgeStore) supersede(ctx context.Context, oldID, newID string, now int64) error {
-	result, err := ks.db.ExecContext(ctx, `
+	result, err := ks.db.ExecContext(
+		ctx, `
 		UPDATE decisions
 		SET status = 'superseded', updated_at = ?
 		WHERE id = ? AND status != 'superseded'`,
@@ -654,7 +662,8 @@ func (ks *KnowledgeStore) supersede(ctx context.Context, oldID, newID string, no
 
 	// Set the supersedes_id on the new decision if not already set.
 	if newID != "" {
-		_, _ = ks.db.ExecContext(ctx, `
+		_, _ = ks.db.ExecContext(
+			ctx, `
 			UPDATE decisions SET supersedes_id = ?, updated_at = ?
 			WHERE id = ? AND supersedes_id IS NULL`,
 			oldID, now, newID,
@@ -805,7 +814,8 @@ func (ks *KnowledgeStore) CreateNote(ctx context.Context, params CreateNoteParam
 		CommitHash:  params.CommitHash,
 	}
 
-	_, err := ks.db.ExecContext(ctx, `
+	_, err := ks.db.ExecContext(
+		ctx, `
 		INSERT INTO notes (id, created_at, updated_at, message,
 		                   workspace_id, branch, commit_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -834,7 +844,8 @@ func (ks *KnowledgeStore) GetNote(ctx context.Context, id string) (*Note, error)
 	n := &Note{}
 	var workspaceID sql.NullString
 
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, created_at, updated_at, message,
 		       workspace_id, COALESCE(branch, ''), COALESCE(commit_hash, '')
 		FROM notes WHERE id = ?`, id,
@@ -975,51 +986,51 @@ func (ks *KnowledgeStore) Search(ctx context.Context, params SearchParams) ([]Se
 	pattern := "%" + q + "%"
 
 	var conditions []string
-	var args []any	// ── Decisions sub-query ──────────────────────────────────────
-		if params.Type == nil || *params.Type == "decision" {
-			decScore := `(CASE WHEN title LIKE ? THEN 1 ELSE 0 END +
+	var args []any // ── Decisions sub-query ──────────────────────────────────────
+	if params.Type == nil || *params.Type == "decision" {
+		decScore := `(CASE WHEN title LIKE ? THEN 1 ELSE 0 END +
 			              CASE WHEN context LIKE ? THEN 1 ELSE 0 END +
 			              CASE WHEN decision LIKE ? THEN 1 ELSE 0 END +
 			              CASE WHEN alternatives LIKE ? THEN 1 ELSE 0 END +
 			              CASE WHEN consequences LIKE ? THEN 1 ELSE 0 END)`
-			decWhereCond := `(title LIKE ? OR context LIKE ? OR decision LIKE ? OR alternatives LIKE ? OR consequences LIKE ?)`
+		decWhereCond := `(title LIKE ? OR context LIKE ? OR decision LIKE ? OR alternatives LIKE ? OR consequences LIKE ?)`
 
-			decWhere := "WHERE " + decWhereCond
-			// Score `?`s first, then WHERE `?`s — args must match this order.
-			decScoreArgs := []any{pattern, pattern, pattern, pattern, pattern}
-			decWhereArgs := []any{pattern, pattern, pattern, pattern, pattern}
+		decWhere := "WHERE " + decWhereCond
+		// Score `?`s first, then WHERE `?`s — args must match this order.
+		decScoreArgs := []any{pattern, pattern, pattern, pattern, pattern}
+		decWhereArgs := []any{pattern, pattern, pattern, pattern, pattern}
 
-			if params.WorkspaceID != nil && *params.WorkspaceID != "" {
-				decWhere += " AND workspace_id = ?"
-				decWhereArgs = append(decWhereArgs, *params.WorkspaceID)
-			}
-
-			conditions = append(conditions, fmt.Sprintf(`
-SELECT 'decision' AS type, id, title, status, workspace_id, created_at, %s AS score
-FROM decisions %s`, decScore, decWhere))
-			args = append(args, decScoreArgs...)  // score ?s first
-			args = append(args, decWhereArgs...)  // then WHERE ?s
+		if params.WorkspaceID != nil && *params.WorkspaceID != "" {
+			decWhere += " AND workspace_id = ?"
+			decWhereArgs = append(decWhereArgs, *params.WorkspaceID)
 		}
 
-		// ── Notes sub-query ──────────────────────────────────────────
-		if params.Type == nil || *params.Type == "note" {
-			noteScore := `CASE WHEN message LIKE ? THEN 1 ELSE 0 END`
-			noteCond := `message LIKE ?`
+		conditions = append(conditions, fmt.Sprintf(`
+SELECT 'decision' AS type, id, title, status, workspace_id, created_at, %s AS score
+FROM decisions %s`, decScore, decWhere))
+		args = append(args, decScoreArgs...) // score ?s first
+		args = append(args, decWhereArgs...) // then WHERE ?s
+	}
 
-			noteWhere := "WHERE " + noteCond
-			noteScoreArgs := []any{pattern}
-			noteWhereArgs := []any{pattern}
+	// ── Notes sub-query ──────────────────────────────────────────
+	if params.Type == nil || *params.Type == "note" {
+		noteScore := `CASE WHEN message LIKE ? THEN 1 ELSE 0 END`
+		noteCond := `message LIKE ?`
 
-			if params.WorkspaceID != nil && *params.WorkspaceID != "" {
-				noteWhere += " AND workspace_id = ?"
-				noteWhereArgs = append(noteWhereArgs, *params.WorkspaceID)
-			}
+		noteWhere := "WHERE " + noteCond
+		noteScoreArgs := []any{pattern}
+		noteWhereArgs := []any{pattern}
 
-			conditions = append(conditions, fmt.Sprintf(`
+		if params.WorkspaceID != nil && *params.WorkspaceID != "" {
+			noteWhere += " AND workspace_id = ?"
+			noteWhereArgs = append(noteWhereArgs, *params.WorkspaceID)
+		}
+
+		conditions = append(conditions, fmt.Sprintf(`
 SELECT 'note' AS type, id, message AS title, '' AS status, workspace_id, created_at, %s AS score
 FROM notes %s`, noteScore, noteWhere))
-			args = append(args, noteScoreArgs...)  // score ?s first
-			args = append(args, noteWhereArgs...)  // then WHERE ?s
+		args = append(args, noteScoreArgs...) // score ?s first
+		args = append(args, noteWhereArgs...) // then WHERE ?s
 	}
 
 	if len(conditions) == 0 {
@@ -1064,7 +1075,8 @@ FROM notes %s`, noteScore, noteWhere))
 func (ks *KnowledgeStore) StartOnboarding(ctx context.Context, participant string) (*OnboardingSession, error) {
 	// Check for existing active session.
 	existing := &OnboardingSession{}
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, created_at, updated_at, participant, status
 		FROM onboarding_sessions
 		WHERE participant = ? AND status = 'active'
@@ -1099,7 +1111,8 @@ func (ks *KnowledgeStore) StartOnboarding(ctx context.Context, participant strin
 		Status:      "active",
 	}
 
-	_, err = ks.db.ExecContext(ctx, `
+	_, err = ks.db.ExecContext(
+		ctx, `
 		INSERT INTO onboarding_sessions (id, created_at, updated_at, participant, status)
 		VALUES (?, ?, ?, ?, ?)`,
 		s.ID, s.CreatedAt, s.UpdatedAt, s.Participant, s.Status,
@@ -1160,7 +1173,8 @@ func (ks *KnowledgeStore) StartOnboarding(ctx context.Context, participant strin
 // GetOnboardingSession retrieves a session by ID.
 func (ks *KnowledgeStore) GetOnboardingSession(ctx context.Context, sessionID string) (*OnboardingSession, error) {
 	s := &OnboardingSession{}
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, created_at, updated_at, participant, status
 		FROM onboarding_sessions WHERE id = ?`, sessionID,
 	).Scan(&s.ID, &s.CreatedAt, &s.UpdatedAt, &s.Participant, &s.Status)
@@ -1341,7 +1355,8 @@ func (ks *KnowledgeStore) CreateWorkspace(ctx context.Context, params CreateWork
 		UpdatedAt:   now,
 	}
 
-	_, err := ks.db.ExecContext(ctx, `
+	_, err := ks.db.ExecContext(
+		ctx, `
 		INSERT INTO workspaces (id, name, description, status, tags, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?)`,
 		w.ID, w.Name, w.Description, w.Status, tagsJSON, w.CreatedAt, w.UpdatedAt,
@@ -1771,7 +1786,7 @@ func (ks *KnowledgeStore) UpdateWorkspaceLastCommit(ctx context.Context, workspa
 	}
 
 	return nil
-}	// ── Workspace status ────────────────────────────────────────────────
+} // ── Workspace status ────────────────────────────────────────────────
 
 // GetWorkspaceStatus returns a full summary of a workspace's contents —
 // its metadata, tracked files, tracked branches, linked decisions, linked
@@ -1866,7 +1881,8 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 // Returns nil if no config has been stored.
 func (ks *KnowledgeStore) GetGitHubConfig(ctx context.Context) (*GitHubConfig, error) {
 	cfg := &GitHubConfig{}
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT token, COALESCE(owner, ''), COALESCE(repo, ''), COALESCE(base_branch, 'main'), updated_at
 		FROM github_config WHERE id = 'default'`,
 	).Scan(&cfg.Token, &cfg.Owner, &cfg.Repo, &cfg.BaseBranch, &cfg.UpdatedAt)
@@ -1929,12 +1945,12 @@ func (ks *KnowledgeStore) CreatePullRequest(ctx context.Context, params CreatePu
 
 	if ks.bus != nil {
 		_ = ks.bus.Publish(ctx, events.EventPullRequestCreated, events.PullRequestCreatedPayload{
-			Number:     pr.Number,
-			Title:      pr.Title,
-			Branch:     pr.Branch,
-			Base:       pr.Base,
-			URL:        pr.URL,
-			CreatedAt:  now,
+			Number:    pr.Number,
+			Title:     pr.Title,
+			Branch:    pr.Branch,
+			Base:      pr.Base,
+			URL:       pr.URL,
+			CreatedAt: now,
 		})
 	}
 
@@ -1966,7 +1982,8 @@ func (ks *KnowledgeStore) ListPullRequests(ctx context.Context, workspaceID stri
 // GetPullRequestByNumber retrieves a pull request by its GitHub number.
 func (ks *KnowledgeStore) GetPullRequestByNumber(ctx context.Context, number int) (*PullRequest, error) {
 	pr := &PullRequest{}
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), COALESCE(merge_commit_sha, ''), COALESCE(merged_at, 0), created_at, updated_at
 		FROM pull_requests WHERE number = ?`, number,
 	).Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.MergeCommitSHA, &pr.MergedAt, &pr.CreatedAt, &pr.UpdatedAt)
@@ -1977,7 +1994,7 @@ func (ks *KnowledgeStore) GetPullRequestByNumber(ctx context.Context, number int
 		return nil, fmt.Errorf("get pull request: %w", err)
 	}
 	return pr, nil
-}	// ── PR Review CRUD ─────────────────────────────────────────────────
+} // ── PR Review CRUD ─────────────────────────────────────────────────
 
 // CreateReview records a pull request review in the store.
 func (ks *KnowledgeStore) CreateReview(ctx context.Context, params CreateReviewParams) (*PRReview, error) {
@@ -2070,7 +2087,7 @@ func scanReviews(rows *sql.Rows) ([]PRReview, error) {
 	return reviews, rows.Err()
 }
 
-	// ── Issue CRUD ───────────────────────────────────────────────────────
+// ── Issue CRUD ───────────────────────────────────────────────────────
 
 // CreateIssue records an issue in the store.
 func (ks *KnowledgeStore) CreateIssue(ctx context.Context, params CreateIssueParams) (*Issue, error) {
@@ -2214,7 +2231,8 @@ func (ks *KnowledgeStore) InstallPlugin(ctx context.Context, name, version, desc
 func (ks *KnowledgeStore) GetPlugin(ctx context.Context, name string) (*Plugin, error) {
 	p := &Plugin{}
 	var enabled int
-	err := ks.db.QueryRowContext(ctx, `
+	err := ks.db.QueryRowContext(
+		ctx, `
 		SELECT id, name, version, COALESCE(description, ''), path, enabled, manifest_json, installed_at
 		FROM plugins WHERE name = ?`, name,
 	).Scan(&p.ID, &p.Name, &p.Version, &p.Description, &p.Path, &enabled, &p.ManifestJSON, &p.InstalledAt)

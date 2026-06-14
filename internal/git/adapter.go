@@ -20,19 +20,19 @@ import (
 
 // StatusEntry represents a single file in the working tree status.
 type StatusEntry struct {
-	IndexStatus  string `json:"index_status"`  // staged change (M, A, D, R, C, or space)
+	IndexStatus    string `json:"index_status"`    // staged change (M, A, D, R, C, or space)
 	WorktreeStatus string `json:"worktree_status"` // unstaged change (M, A, D, or space)
-	Path         string `json:"path"`
-	OldPath      string `json:"old_path,omitempty"` // for renames/copies
+	Path           string `json:"path"`
+	OldPath        string `json:"old_path,omitempty"` // for renames/copies
 }
 
 // Status holds the full working tree status.
 type Status struct {
-	Branch     string        `json:"branch"`
-	Clean      bool          `json:"clean"`
-	Staged     []StatusEntry `json:"staged"`
-	Unstaged   []StatusEntry `json:"unstaged"`
-	Untracked  []string      `json:"untracked"`
+	Branch    string        `json:"branch"`
+	Clean     bool          `json:"clean"`
+	Staged    []StatusEntry `json:"staged"`
+	Unstaged  []StatusEntry `json:"unstaged"`
+	Untracked []string      `json:"untracked"`
 }
 
 // Commit represents a single commit in the history.
@@ -55,8 +55,8 @@ type Branch struct {
 
 // Remote represents a Git remote.
 type Remote struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
 	PushURL string `json:"push_url,omitempty"`
 }
 
@@ -174,7 +174,6 @@ func (a *ExecAdapter) run(ctx context.Context, args ...string) (string, string, 
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
-
 	// Git exits non-zero for many common cases. Return the combined error.
 	if err != nil {
 		return strings.TrimSpace(stdout.String()), strings.TrimSpace(stderr.String()),

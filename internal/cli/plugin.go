@@ -73,9 +73,9 @@ func newPluginListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List installed plugins",
-		Long: `List all installed plugins, their version, and enabled/disabled status.`,
-		Args: cobra.NoArgs,
-		RunE: runPluginList,
+		Long:  `List all installed plugins, their version, and enabled/disabled status.`,
+		Args:  cobra.NoArgs,
+		RunE:  runPluginList,
 	}
 	return cmd
 }
@@ -352,7 +352,7 @@ func runPluginRun(cmd *cobra.Command, args []string) error {
 // Used during plugin installation.
 func copyDir(src, dst string) error {
 	// Create destination directory.
-	if err := os.MkdirAll(dst, 0755); err != nil {
+	if err := os.MkdirAll(dst, 0o755); err != nil {
 		return fmt.Errorf("create destination: %w", err)
 	}
 
@@ -374,7 +374,7 @@ func copyDir(src, dst string) error {
 			if readErr != nil {
 				return fmt.Errorf("read %s: %w", srcPath, readErr)
 			}
-			if writeErr := os.WriteFile(dstPath, data, 0644); writeErr != nil {
+			if writeErr := os.WriteFile(dstPath, data, 0o644); writeErr != nil {
 				return fmt.Errorf("write %s: %w", dstPath, writeErr)
 			}
 		}

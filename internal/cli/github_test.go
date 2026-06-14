@@ -82,16 +82,16 @@ func setupGitHubTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 	mux.HandleFunc("/repos/testowner/testrepo/pulls/42", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		pr := map[string]interface{}{
-			"number":        42,
-			"title":         "Test PR",
-			"state":         "open",
-			"html_url":      fmt.Sprintf("%s/pull/42", srv.URL),
-			"draft":         false,
-			"mergeable":     true,
-			"merged":        false,
-			"body":          "Test body",
-			"head":          map[string]interface{}{"ref": "feature-branch"},
-			"base":          map[string]interface{}{"ref": "main"},
+			"number":          42,
+			"title":           "Test PR",
+			"state":           "open",
+			"html_url":        fmt.Sprintf("%s/pull/42", srv.URL),
+			"draft":           false,
+			"mergeable":       true,
+			"merged":          false,
+			"body":            "Test body",
+			"head":            map[string]interface{}{"ref": "feature-branch"},
+			"base":            map[string]interface{}{"ref": "main"},
 			"mergeable_state": "clean",
 		}
 		json.NewEncoder(w).Encode(pr)
@@ -119,8 +119,6 @@ func setupGitHubTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 			"message": "Pull Request successfully merged",
 		})
 	})
-
-
 
 	// Mock /repos/:owner/:repo/issues endpoint (create/list)
 	var mockIssues []map[string]interface{}

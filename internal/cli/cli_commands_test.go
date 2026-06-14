@@ -352,7 +352,7 @@ func initTestGitRepo(t *testing.T, dir string) {
 
 	// Create an initial commit so HEAD exists.
 	readme := filepath.Join(dir, "README.md")
-	os.WriteFile(readme, []byte("# Test\n"), 0644)
+	os.WriteFile(readme, []byte("# Test\n"), 0o644)
 	adapter.Run(context.Background(), "add", "README.md")
 	if _, _, err := adapter.Run(context.Background(), "commit", "-m", "Initial commit"); err != nil {
 		t.Fatalf("initTestGitRepo: initial commit: %v", err)

@@ -118,10 +118,10 @@ func (a *ExecAdapter) ListBranches(ctx context.Context) ([]Branch, error) {
 		}
 
 		branches = append(branches, Branch{
-			Name:      name,
-			Current:   isCurrent,
-			Remote:    false,
-			Upstream:  upstream,
+			Name:     name,
+			Current:  isCurrent,
+			Remote:   false,
+			Upstream: upstream,
 		})
 	}
 

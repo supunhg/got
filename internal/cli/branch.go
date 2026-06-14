@@ -206,5 +206,3 @@ func runBranchCheckout(cmd *cobra.Command, name string) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "Switched to branch %q\n", name)
 	return nil
 }
-
-

@@ -140,7 +140,7 @@ func runSafeReset(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "Reset (%s) to %s complete.\n", mode, target)
-		fmt.Fprintf(cmd.OutOrStdout(), "To undo, restore the snapshot: got snapshot show %s\n", snapshot.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "To undo, restore the snapshot: got snapshot show %s\n", snapshot.ID)
 
 	return nil
 }

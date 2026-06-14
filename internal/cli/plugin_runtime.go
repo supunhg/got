@@ -43,19 +43,19 @@ type PluginRuntime struct {
 	commands []PluginCommand
 	// unsubscribers are the bus unsubscribe functions for each plugin's hooks.
 	unsubscribers []func()
-	pluginsDir   string
+	pluginsDir    string
 }
 
 // NewPluginRuntime creates a PluginRuntime for the given store, bus, and
 // plugins directory. It does not load plugins — call Load() to do that.
 func NewPluginRuntime(ks *store.KnowledgeStore, bus *events.Bus, pluginsDir string) *PluginRuntime {
 	return &PluginRuntime{
-		ks:           ks,
-		bus:          bus,
-		plugins:      nil,
-		commands:     nil,
+		ks:            ks,
+		bus:           bus,
+		plugins:       nil,
+		commands:      nil,
 		unsubscribers: nil,
-		pluginsDir:   pluginsDir,
+		pluginsDir:    pluginsDir,
 	}
 }
 
@@ -98,17 +98,18 @@ func (pr *PluginRuntime) Load(ctx context.Context) error {
 			if !version.Matches(manifest.RequiresGotVersion) {
 				loadErrors = append(loadErrors, fmt.Sprintf(
 					"%s: requires GOT version %s (current: %s)",
-					p.Name, manifest.RequiresGotVersion, version.String()))
+					p.Name, manifest.RequiresGotVersion, version.String(),
+				))
 				continue
 			}
 		}
 
 		// Subscribe event hooks.
 		for eventType, scriptPath := range manifest.Hooks {
-			et := eventType    // capture
-			sp := scriptPath   // capture
-			pName := p.Name    // capture
-			pPath := p.Path    // capture
+			et := eventType  // capture
+			sp := scriptPath // capture
+			pName := p.Name  // capture
+			pPath := p.Path  // capture
 
 			unsub, subErr := pr.bus.Subscribe(et, func(ctx context.Context, e events.Event) error {
 				return pr.executeHook(ctx, pName, pPath, sp, e)
@@ -223,8 +224,8 @@ func (pr *PluginRuntime) executeHook(ctx context.Context, pluginName, pluginPath
 
 	// Serialize event data as JSON for stdin.
 	payload := map[string]any{
-		"type":    e.Type,
-		"payload": e.Payload,
+		"type":      e.Type,
+		"payload":   e.Payload,
 		"timestamp": e.Timestamp,
 	}
 	data, err := json.Marshal(payload)

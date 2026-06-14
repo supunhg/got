@@ -35,7 +35,7 @@ func setupPluginTest(t *testing.T) (*store.KnowledgeStore, *events.Bus, string, 
 	ks := store.NewKnowledgeStore(st.DB(), bus)
 
 	pluginsDir := filepath.Join(gotDir, "plugins")
-	if err := os.MkdirAll(pluginsDir, 0755); err != nil {
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
 		t.Fatalf("mkdir plugins: %v", err)
 	}
 
@@ -296,7 +296,7 @@ func TestPluginVersionMatching(t *testing.T) {
 		{"=1.0.0", "1.0.1", false},
 		{"1.0.0", "1.0.0", true},
 		{"1.0.0", "1.0.1", false},
-		{"", "1.0.0", true},  // empty constraint = always pass
+		{"", "1.0.0", true}, // empty constraint = always pass
 	}
 
 	// Save original version and restore after test.

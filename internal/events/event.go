@@ -46,27 +46,27 @@ const (
 	EventDecisionDeleted = "DecisionDeleted"
 
 	// Git adapter
-	EventRepositoryOpened    = "RepositoryOpened"
-	EventBranchCreated       = "BranchCreated"
-	EventBranchDeleted       = "BranchDeleted"
-	EventBranchCheckedOut     = "BranchCheckedOut"
-	EventCommitCreated        = "CommitCreated"
-	EventRemoteAdded          = "RemoteAdded"
-	EventRemoteRemoved        = "RemoteRemoved"
-	EventPushCompleted        = "PushCompleted"
-	EventPullCompleted        = "PullCompleted"
+	EventRepositoryOpened = "RepositoryOpened"
+	EventBranchCreated    = "BranchCreated"
+	EventBranchDeleted    = "BranchDeleted"
+	EventBranchCheckedOut = "BranchCheckedOut"
+	EventCommitCreated    = "CommitCreated"
+	EventRemoteAdded      = "RemoteAdded"
+	EventRemoteRemoved    = "RemoteRemoved"
+	EventPushCompleted    = "PushCompleted"
+	EventPullCompleted    = "PullCompleted"
 
 	// Workspaces
-	EventWorkspaceCreated    = "WorkspaceCreated"
-	EventWorkspaceUpdated    = "WorkspaceUpdated"
-	EventWorkspaceDeleted    = "WorkspaceDeleted"
+	EventWorkspaceCreated     = "WorkspaceCreated"
+	EventWorkspaceUpdated     = "WorkspaceUpdated"
+	EventWorkspaceDeleted     = "WorkspaceDeleted"
 	EventWorkspaceItemAdded   = "WorkspaceItemAdded"
 	EventWorkspaceItemRemoved = "WorkspaceItemRemoved"
 
 	// Onboarding
-	EventOnboardingStarted      = "OnboardingStarted"
-	EventOnboardingItemCovered  = "OnboardingItemCovered"
-	EventOnboardingCompleted    = "OnboardingCompleted"
+	EventOnboardingStarted     = "OnboardingStarted"
+	EventOnboardingItemCovered = "OnboardingItemCovered"
+	EventOnboardingCompleted   = "OnboardingCompleted"
 
 	// GitHub integration
 	EventPullRequestCreated  = "PullRequestCreated"
@@ -102,17 +102,17 @@ type DecisionUpdatedPayload struct {
 
 // DecisionSupersededPayload is published when one decision supersedes another.
 type DecisionSupersededPayload struct {
-	ID          string `json:"id"`
-	NewID       string `json:"new_id"`
-	OldStatus   string `json:"old_status"`
-	SupersededAt int64 `json:"superseded_at"`
+	ID           string `json:"id"`
+	NewID        string `json:"new_id"`
+	OldStatus    string `json:"old_status"`
+	SupersededAt int64  `json:"superseded_at"`
 }
 
 // DecisionLinkedPayload is published when a link (commit, file, workspace) is
 // attached to a decision.
 type DecisionLinkedPayload struct {
 	DecisionID string `json:"decision_id"`
-	LinkType   string `json:"link_type"`    // "commit", "file", "workspace"
+	LinkType   string `json:"link_type"` // "commit", "file", "workspace"
 	Target     string `json:"target"`
 	CreatedAt  int64  `json:"created_at"`
 }
@@ -155,7 +155,7 @@ type OnboardingStartedPayload struct {
 // OnboardingItemCoveredPayload is published when an onboarding item is marked covered.
 type OnboardingItemCoveredPayload struct {
 	SessionID  string `json:"session_id"`
-	ItemType   string `json:"item_type"`   // "decision", "note", "file"
+	ItemType   string `json:"item_type"` // "decision", "note", "file"
 	ItemTarget string `json:"item_target"`
 	CoveredAt  int64  `json:"covered_at"`
 }
@@ -166,8 +166,8 @@ type OnboardingItemCoveredPayload struct {
 
 // RepositoryOpenedPayload is published when a repository is opened.
 type RepositoryOpenedPayload struct {
-	Path      string `json:"path"`
-	OpenedAt  int64  `json:"opened_at"`
+	Path     string `json:"path"`
+	OpenedAt int64  `json:"opened_at"`
 }
 
 // BranchCreatedPayload is published when a branch is created.
@@ -201,9 +201,9 @@ type CommitCreatedPayload struct {
 
 // RemoteAddedPayload is published when a remote is added.
 type RemoteAddedPayload struct {
-	Name      string `json:"name"`
-	URL       string `json:"url"`
-	AddedAt   int64  `json:"added_at"`
+	Name    string `json:"name"`
+	URL     string `json:"url"`
+	AddedAt int64  `json:"added_at"`
 }
 
 // RemoteRemovedPayload is published when a remote is removed.
@@ -214,10 +214,10 @@ type RemoteRemovedPayload struct {
 
 // PushCompletedPayload is published after a push completes.
 type PushCompletedPayload struct {
-	Remote    string `json:"remote"`
-	Branch    string `json:"branch"`
-	Force     bool   `json:"force"`
-	CompletedAt int64 `json:"completed_at"`
+	Remote      string `json:"remote"`
+	Branch      string `json:"branch"`
+	Force       bool   `json:"force"`
+	CompletedAt int64  `json:"completed_at"`
 }
 
 // PullCompletedPayload is published after a pull completes.
@@ -248,10 +248,10 @@ type WorkspaceUpdatedPayload struct {
 
 // WorkspaceDeletedPayload is published when a workspace is deleted.
 type WorkspaceDeletedPayload struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	ItemCount   int    `json:"item_count"`
-	DeletedAt   int64  `json:"deleted_at"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ItemCount int    `json:"item_count"`
+	DeletedAt int64  `json:"deleted_at"`
 }
 
 // WorkspaceItemAddedPayload is published when an item (file, branch,
@@ -284,12 +284,12 @@ type OnboardingCompletedPayload struct {
 
 // PullRequestCreatedPayload is published when a PR is created via GOT.
 type PullRequestCreatedPayload struct {
-	Number    int      `json:"number"`
-	Title     string   `json:"title"`
-	Branch    string   `json:"branch"`
-	Base      string   `json:"base"`
-	URL       string   `json:"url,omitempty"`
-	CreatedAt int64    `json:"created_at"`
+	Number    int    `json:"number"`
+	Title     string `json:"title"`
+	Branch    string `json:"branch"`
+	Base      string `json:"base"`
+	URL       string `json:"url,omitempty"`
+	CreatedAt int64  `json:"created_at"`
 }
 
 // IssueCreatedPayload is published when an issue is created via GOT.
@@ -305,7 +305,7 @@ type IssueCreatedPayload struct {
 type PullRequestReviewedPayload struct {
 	PRNumber    int    `json:"pr_number"`
 	Reviewer    string `json:"reviewer"`
-	State       string `json:"state"`      // APPROVED, CHANGES_REQUESTED, COMMENTED
+	State       string `json:"state"` // APPROVED, CHANGES_REQUESTED, COMMENTED
 	Body        string `json:"body,omitempty"`
 	SubmittedAt int64  `json:"submitted_at"`
 }

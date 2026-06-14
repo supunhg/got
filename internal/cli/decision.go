@@ -51,13 +51,13 @@ as Markdown files in .got/decisions/ with metadata in SQLite.`,
 // user for each field via stdin.
 func newDecisionCreateCmd() *cobra.Command {
 	var opts struct {
-		title        string
-		context      string
-		decision     string
-		alternatives string
-		consequences string
-		workspace    string
-		supersedes   string
+		title         string
+		context       string
+		decision      string
+		alternatives  string
+		consequences  string
+		workspace     string
+		supersedes    string
 		noInteractive bool
 	}
 
@@ -104,8 +104,9 @@ func runDecisionCreate(cmd *cobra.Command, opts *struct {
 	consequences  string
 	workspace     string
 	supersedes    string
-	noInteractive  bool
-}) error {
+	noInteractive bool
+},
+) error {
 	ctx := context.Background()
 
 	// ── Gather input ──────────────────────────────────────────────
@@ -371,7 +372,7 @@ func runDecisionShow(cmd *cobra.Command, id string, jsonOut bool) error {
 // showDecisionJSON writes the decision (with embedded links) as JSON.
 func showDecisionJSON(cmd *cobra.Command, d *store.Decision, links []store.DecisionLink) error {
 	out := struct {
-		Decision store.Decision     `json:"decision"`
+		Decision store.Decision       `json:"decision"`
 		Links    []store.DecisionLink `json:"links"`
 	}{
 		Decision: *d,
@@ -405,7 +406,8 @@ func showDecisionTerminal(cmd *cobra.Command, d *store.Decision, links []store.D
 	} else {
 		fmt.Fprintf(w, "**Status:** %s  |  **ID:** %s\n", d.Status, d.ID)
 	}
-	fmt.Fprintf(w, "**Created:** %s  |  **Updated:** %s\n",
+	fmt.Fprintf(
+		w, "**Created:** %s  |  **Updated:** %s\n",
 		time.UnixMilli(d.CreatedAt).Format("2006-01-02 15:04 MST"),
 		time.UnixMilli(d.UpdatedAt).Format("2006-01-02 15:04 MST"),
 	)
@@ -457,8 +459,6 @@ func showDecisionTerminal(cmd *cobra.Command, d *store.Decision, links []store.D
 	return nil
 }
 
-
-
 // ── Decision link ───────────────────────────────────────────────────
 
 func newDecisionLinkCmd() *cobra.Command {
@@ -505,7 +505,8 @@ Examples:
 }
 
 func runDecisionLink(cmd *cobra.Command, decisionID, commitSHA, filePath, workspace, branchFlag string,
-	lineStart, lineEnd int, autoLink, branchLink bool) error {
+	lineStart, lineEnd int, autoLink, branchLink bool,
+) error {
 	ctx := context.Background()
 
 	// ── Determine link type and target ───────────────────────────
@@ -682,12 +683,12 @@ func runDecisionSupersede(cmd *cobra.Command, oldID, newID string) error {
 
 func newDecisionUpdateCmd() *cobra.Command {
 	var opts struct {
-		title        string
-		context      string
-		decision     string
-		alternatives string
-		consequences string
-		workspace    string
+		title          string
+		context        string
+		decision       string
+		alternatives   string
+		consequences   string
+		workspace      string
 		clearWorkspace bool
 	}
 
@@ -732,7 +733,8 @@ func runDecisionUpdate(cmd *cobra.Command, id string, opts *struct {
 	consequences   string
 	workspace      string
 	clearWorkspace bool
-}) error {
+},
+) error {
 	ctx := context.Background()
 
 	// ── Build params from non-empty flags ────────────────────────
@@ -1008,5 +1010,3 @@ func findGotDir() (string, error) {
 		dir = parent
 	}
 }
-
-
