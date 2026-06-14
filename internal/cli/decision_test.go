@@ -13,7 +13,7 @@ import (
 	"github.com/supunhg/got/internal/store"
 )
 
-// testCLIEnv sets up a temporary directory with an initialised .got/
+// testCLIEnv sets up a temporary directory with an initialized .got/
 // SQLite database. It changes the working directory to the temp dir so
 // that openKnowledgeStore / findGotDir can find .got/.
 //
@@ -185,7 +185,7 @@ func TestDecisionDelete_Nonexistent(t *testing.T) {
 }
 
 // TestDecisionDelete_NoGotDir verifies that running delete outside a
-// GOT-initialised directory returns the appropriate error.
+// GOT-initialized directory returns the appropriate error.
 func TestDecisionDelete_NoGotDir(t *testing.T) {
 	// Create a temp dir without .got/ and chdir into it.
 	dir, err := os.MkdirTemp("", "got-cli-no-got-*")

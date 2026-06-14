@@ -10,7 +10,7 @@ import (
 )
 
 // newTestRepo creates a temporary Git repository and returns its path.
-// It initialises the repo with an initial commit on "main".
+// It initializes the repo with an initial commit on "main".
 func newTestRepo(t *testing.T) string {
 	t.Helper()
 

@@ -71,7 +71,7 @@ func TestNoteDelete_Nonexistent(t *testing.T) {
 }
 
 // TestNoteDelete_NoGotDir verifies that running delete outside a
-// GOT-initialised directory returns the appropriate error.
+// GOT-initialized directory returns the appropriate error.
 func TestNoteDelete_NoGotDir(t *testing.T) {
 	dir, err := os.MkdirTemp("", "got-cli-no-got-*")
 	if err != nil {
