@@ -15,7 +15,7 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 | Event System | ✅ Complete | 21 event types, thread-safe pub/sub, event logger |
 | Snapshot Engine | ✅ Complete | Create/list/show/delete, auto-snapshot before destructive ops |
 | Safe Operations | ✅ Complete | `got safe reset/push/rebase` with automatic snapshots |
-| CI/CD | ✅ Complete | GitHub Actions, GoReleaser, cross-platform builds |
+| CI | ✅ Complete | GitHub Actions (test, vet, lint, format, build) |
 | Shell Completions | ✅ Complete | bash, zsh, fish, powershell via `got completion` |
 | Health Check | ✅ Complete | `got health` validates .got/, DB, Git, workspace consistency |
 
@@ -53,7 +53,7 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 ### v1.0.0 — Stable Release
 - All features stable and tested (comprehensive test coverage, race-clean)
 - Cross-platform builds (darwin/linux/windows × amd64/arm64)
-- GitHub Actions CI/CD with GoReleaser
+- GitHub Actions CI (test, vet, lint, format check, build)
 - CLI-level tests for all new commands
 
 ## Next Up (v1.1)
