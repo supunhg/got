@@ -1,10 +1,12 @@
+// Copyright 2026 The GOT Authors. MIT License.
+//
 // Package version exposes the GOT binary's build-time identity. The
 // Version, Commit, and Date variables are intended to be overridden at
 // build time via:
 //
-//	-ldflags "-X github.com/got-sh/got/internal/version.Version=... \
-//	          -X github.com/got-sh/got/internal/version.Commit=... \
-//	          -X github.com/got-sh/got/internal/version.Date=..."
+//	-ldflags "-X github.com/supunhg/got/internal/version.Version=... \
+//	          -X github.com/supunhg/got/internal/version.Commit=... \
+//	          -X github.com/supunhg/got/internal/version.Date=..."
 package version
 
 import (
@@ -15,7 +17,7 @@ import (
 
 // Version is the GOT semantic version (e.g. "0.1.0"). Defaults to "dev" for
 // builds that did not inject a value.
-var Version = "dev"
+var Version = "1.0.0"
 
 // Commit is the short git SHA the binary was built from, or "none" if the
 // build did not inject one.

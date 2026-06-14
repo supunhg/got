@@ -1,4 +1,4 @@
-module github.com/got-sh/got
+module github.com/supunhg/got
 
 go 1.25.0
 

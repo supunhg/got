@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -16,8 +17,8 @@ import (
 	"github.com/google/go-github/v70/github"
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/git"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/git"
+	"github.com/supunhg/got/internal/store"
 )
 
 // newGitHubCmd builds the `got github` command tree.

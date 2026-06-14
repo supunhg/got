@@ -2,7 +2,7 @@
 
 > **Status:** Design specification — implementation deferred to v0.4.
 > This document is forward-looking. Core infrastructure (store, event bus, workspace engine) will be in place by v0.4.
-> See `got-spec.md` for the current v0.1 scope and roadmap.
+> See `got-spec.md` (in this directory) for the v0.1 scope. See `../ROADMAP.md` for the current roadmap.
 
 ---
 

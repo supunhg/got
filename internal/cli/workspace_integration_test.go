@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/got-sh/got/internal/git"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/git"
+	"github.com/supunhg/got/internal/store"
 )
 
 // newTestRepo creates a temporary Git repository and returns its path.

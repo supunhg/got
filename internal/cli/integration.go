@@ -4,6 +4,7 @@
 // This is the "glue" that makes the system feel cohesive: commits
 // automatically update workspace activity, branches get tracked, and
 // knowledge artifacts get linked to the right commits.
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -11,9 +12,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/git"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/git"
+	"github.com/supunhg/got/internal/store"
 )
 
 // IntegrationService ties the event bus to the store layer. It subscribes

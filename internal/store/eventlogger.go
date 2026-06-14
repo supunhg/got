@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package store
 
 import (
@@ -6,7 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/got-sh/got/internal/events"
+	"github.com/supunhg/got/internal/events"
 )
 
 // EventLogger subscribes to all events on a Bus and durably writes them

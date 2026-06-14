@@ -1,0 +1,53 @@
+version: 2
+
+project_name: got
+
+builds:
+  - main: ./cmd/got
+    binary: got
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/supunhg/got/internal/version.Version={{.Version}}
+      - -X github.com/supunhg/got/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/supunhg/got/internal/version.Date={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - repository:
+      owner: supunhg
+      name: homebrew-tap
+    homepage: https://github.com/supunhg/got
+    description: "Git-native developer operating layer"
+    license: "MIT"
+    install: |
+      bin.install "got"

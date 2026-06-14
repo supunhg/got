@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/store"
-	"github.com/got-sh/got/internal/version"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/store"
+	"github.com/supunhg/got/internal/version"
 )
 
 // ── Test helpers ─────────────────────────────────────────────────────

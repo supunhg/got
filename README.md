@@ -1,164 +1,177 @@
-# GOT — Git-native developer operating layer
+# GOT — Git-Native Developer Operating Layer
 
 [![Go Version](https://img.shields.io/badge/Go-1.25-blue)](https://go.dev)
-[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/got-sh/got)](https://goreportcard.com/report/github.com/got-sh/got)
+[![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![CI](https://github.com/supunhg/got/actions/workflows/ci.yml/badge.svg)](https://github.com/supunhg/got/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/supunhg/got)](https://goreportcard.com/report/github.com/supunhg/got)
 
-GOT is a Git-native developer operating layer. It does **not** replace Git — it enhances Git with workflow abstraction, safety mechanisms, repository intelligence, team knowledge management, and interactive developer experiences.
+**GOT enhances Git with workspace management, decision tracking, team knowledge, and GitHub integration — without replacing Git.**
 
-**Git remains the source of truth. GOT metadata lives in `.got/`. Your repository stays 100% usable without GOT.**
+Your repository stays 100% usable without GOT. All metadata lives in `.got/`. Git remains the source of truth.
 
 ---
 
 ## Quick Start
 
+### Install
+
 ```bash
-# Install (from source)
-git clone https://github.com/got-sh/got.git
+# With Go
+go install github.com/supunhg/got/cmd/got@latest
+
+# From source
+git clone https://github.com/supunhg/got.git
 cd got
 make build
-./bin/got --version
+# binary is at ./bin/got
+```
 
-# Initialize GOT in a Git repository
+### Get Started
+
+```bash
+# Initialize GOT in any Git repository
 cd your-project
 got init
 
-# Explore
-got status          # working tree status
-got graph           # text-based commit graph
-got branch          # list branches
-got workspace list  # list workspaces
+# Core workflow
+got status                              # working tree overview
+got commit -m "feat: add auth module"   # commit with validation
+got workspace create oauth              # organize work by context
+got decision create "Use JWT tokens"    # record architectural decisions
 ```
+
+---
+
+## Why GOT?
+
+Git is excellent at tracking file changes. But day-to-day development involves much more: tracking *why* decisions were made, managing context across branches, onboarding teammates, and coordinating with GitHub.
+
+GOT adds these capabilities as a thin layer on top of Git:
+
+| With Git alone | With GOT |
+|---|---|
+| `git log` to see what changed | `got workspace show` to see everything about a feature: files, branches, decisions, PRs |
+| Scattered notes about architecture decisions | `got decision create` for structured, searchable ADRs |
+| "Read the code" onboarding | `got onboard start` with guided, skippable steps |
+| Switch between `git` and `gh` CLI | `got github pr create` links PRs to workspaces automatically |
+| Hope nobody force-pushes | Safe operations with recovery snapshots (planned) |
 
 ---
 
 ## Features
 
-### Core Git Commands
+### Workspace Engine
 
-| Command | Description |
-|---------|-------------|
-| `got status` | Working tree status with staged/unstaged/untracked sections, `--json` |
-| `got commit` | `-m` required, `--all`, `--allow-empty`, `--auto-link` (links decisions/notes) |
-| `got branch` | List (`--json`), create, delete (`-f`), checkout |
-| `got graph` | Text-based commit graph with SHAs, messages, refs, merge info. `--branch`, `--max-count` |
-| `got remote` | List (`--json`), add, remove, push (`-f`), pull |
+Group related files, branches, decisions, and notes into logical contexts.
+
+```bash
+got workspace create oauth --description "OAuth 2.0 implementation" --tags auth,security
+got workspace add-file oauth src/auth/oauth.go
+got workspace add-branch oauth feat/oauth2-refresh
+got workspace show oauth          # see everything in one place
+got workspace sync oauth          # detect stale files/branches
+```
 
 ### Knowledge Engine
 
-| Command | Description |
-|---------|-------------|
-| `got decision` | Full ADR CRUD: create, list, show, link (`--auto`, `--branch-link`), supersede, update, delete |
-| `got note` | Note CRUD with workspace/branch/commit linking |
-| `got search` | Full-text search across decisions (5 fields) + notes with relevance scoring. `--type`, `--workspace`, `--json` |
-| `got onboard` | Onboarding session lifecycle: start, list, progress, mark, skip, complete |
+Searchable architectural decisions, notes, and onboarding guides.
 
-### Workspace Engine
+```bash
+got decision create "Use PostgreSQL for audit log" --status accepted
+got decision list
+got decision link <id> --auto     # link to current commit
+got note add "Need to review rate limiting before launch"
+got search "oauth" --type decision
+```
 
-| Command | Description |
-|---------|-------------|
-| `got workspace create` | Create with `--description`, `--tags`, `--create-branch` |
-| `got workspace list` | Table output with status, description, tags |
-| `got workspace show` | Detailed view with files, branches, decisions, notes, commits, **pull requests, issues** |
-| `got workspace status` | Compact summary with counts and Git branch state |
-| `got workspace add-file` | Track a file (validates existence on disk or in Git tree) |
-| `got workspace add-branch` | Track a branch (validates existence in Git) |
-| `got workspace add-note` | Create a note scoped to a workspace |
-| `got workspace add-decision` | Link a decision to a workspace |
-| `got workspace sync` | Detect stale files/branches and clean up |
+### Onboarding
 
-### Plugin Runtime
+```bash
+got onboard start                 # begin guided onboarding session
+got onboard progress              # see what's done, what's next
+got onboard mark step-3           # mark a step complete
+```
 
-| Command | Description |
-|---------|-------------|
-| `got plugin install <path>` | Install a plugin from a local directory |
-| `got plugin remove <name>` | Uninstall a plugin |
-| `got plugin list` | Show installed plugins, enabled/disabled status, version |
-| `got plugin enable <name>` | Enable a plugin |
-| `got plugin disable <name>` | Disable a plugin |
-| `got plugin run <name> <action>` | Manually trigger a plugin action |
+### GitHub Integration
 
-Plugins are external scripts that subscribe to events on GOT's event bus. Event data is passed as JSON via stdin. Plugins can also register CLI subcommands.
+Manage PRs and issues without leaving your terminal. Automatically links to workspaces.
 
-### GitHub Integration (Built-in Plugin)
+```bash
+got github auth                   # authenticate (uses gh CLI token if available)
+got github pr create --title "Add OAuth support"
+got github pr status 42           # reviews, merge status, checks
+got github pr merge 42 --method squash --delete-branch
+got github issue list --workspace oauth
+```
 
-| Command | Description |
-|---------|-------------|
-| `got github auth` | Store GitHub PAT (tries `gh auth token` first), validates via API |
-| `got github pr create --title` | Create PR from current branch, auto-includes workspace refs |
-| `got github pr list` | List open PRs, filter by `--branch`, `--workspace` |
-| `got github pr status <number>` | Detailed PR info: mergeable, reviews, checks |
-| `got github issue create --title` | Create issue with `--labels`, `--assignee`, `--workspace` |
-| `got github issue list` | List open issues, filter by `--workspace` |
-| `got github link <type> <id>` | Manually link workspace to PR or issue |
+### Core Git Commands (Enhanced)
+
+```bash
+got graph                         # text-based commit graph
+got branch                        # list with upstream info
+got remote list                   # remotes with push/pull
+got status --json                 # machine-readable output
+```
+
+### Plugin System
+
+Extend GOT with external scripts that subscribe to events.
+
+```bash
+got plugin install ./my-plugin    # install from local directory
+got plugin list                   # show installed plugins
+got plugin run hello-world greet  # run a plugin command
+```
+
+Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as isolated subprocesses. See [`docs/ARCHITECTURE_PLUGINS.md`](docs/ARCHITECTURE_PLUGINS.md) for the full protocol.
+
+---
+
+## Philosophy
+
+1. **Git is the source of truth.** GOT never modifies Git in ways you didn't ask for.
+2. **Metadata is isolated.** Everything lives in `.got/`. Add it to `.gitignore` and Git stays clean.
+3. **Offline-first.** No network calls except those you initiate (`git push`, `got github`).
+4. **Plugin-first.** Core features use the same event bus and plugin API available to extensions.
+5. **Recoverable.** Every operation is designed to be undoable (snapshots coming in v0.2).
 
 ---
 
 ## Architecture
 
 ```
-cmd/got/main.go          — Entrypoint
+cmd/got/                  Entrypoint
 internal/
-├── cli/                  — Cobra command tree (16 commands)
-│   ├── root.go           — Root command, shared bus, plugin loading
-│   ├── github.go         — GitHub integration (built-in plugin)
-│   ├── plugin.go         — Plugin lifecycle commands
-│   ├── plugin_runtime.go — Plugin runtime: load, execute hooks
-│   ├── integration.go    — Event-driven integration layer
-│   └── ... (workspace, decision, note, commit, branch, etc.)
-├── git/                  — Git adapter (os/exec, not libgit2)
-│   ├── adapter.go        — GitAdapter interface + ExecAdapter
-│   ├── operations.go     — Status, branches, commits
-│   └── remote_graph.go   — Remotes, push/pull, graph
-├── store/                — SQLite storage via modernc.org/sqlite
-│   ├── store.go          — Open/Close with WAL mode, migration runner
-│   ├── knowledge.go      — KnowledgeStore (~1700 lines, all CRUD)
-│   └── migrations/       — 8 SQL migrations (embed.FS)
-├── events/               — In-memory event bus (21 event types)
-│   ├── bus.go            — Thread-safe pub/sub
-│   └── event.go          — Event types + typed payloads
-└── version/              — Build-time version stamping + semver matching
+├── cli/                  Cobra command tree (16+ commands)
+├── git/                  Git adapter (os/exec, no libgit2)
+├── store/                SQLite storage (modernc.org/sqlite, no CGo)
+├── events/               In-memory event bus (21 event types)
+└── version/              Build-time version stamping
 ```
 
-### Key Design Decisions
+**Key design decisions:**
 
-- **Event-driven architecture** — The event bus (`internal/events`) is the backbone for all inter-module communication. Git operations publish events; the workspace engine, plugin hooks, and integration layer subscribe. The bus is shared across all CLI commands via a global instance (`globalBus`).
-- **Plugin hooks via subprocess** — Plugins run as isolated subprocesses (`os/exec`). Event data is passed as JSON via stdin. A failing hook never crashes GOT.
-- **SQLite with migrations** — Pure Go SQLite (`modernc.org/sqlite`), WAL mode, all migrations embedded. No CGo, no external dependencies.
-- **Interface-based Git adapter** — `GitAdapter` interface in `internal/git` lets us mock Git operations in tests and could support a libgit2 backend later.
+- **Event-driven architecture** — the event bus connects all modules. Git operations publish events; workspace engine, plugins, and integration layer subscribe.
+- **Plugin hooks via subprocess** — plugins run as isolated processes with JSON over stdin/stdout. A failing plugin never crashes GOT.
+- **SQLite with migrations** — pure Go, WAL mode, zero external dependencies.
+- **Interface-based Git adapter** — mockable in tests, swappable to libgit2 later.
 
-### Data Flow
-
-```
-User types command
-       ↓
-  Cobra command handler
-       ↓
-  openKnowledgeStore() → obtains shared globalBus
-       ↓
-  Store operations publish events (CommitCreated, WorkspaceUpdated, etc.)
-       ↓
-  Event bus dispatches to subscribers:
-    ├── Integration layer → auto-update workspaces
-    ├── Plugin hooks      → execute script with JSON stdin
-    └── Event logger      → persist to event_log table
-```
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
 
 ---
 
-## Current Status
+## Documentation
 
-| Layer | Status | Details |
-|-------|--------|---------|
-| Git Adapter | ✅ Built | Status, commits, branches, remotes, graph — 12 tests |
-| Knowledge Engine | ✅ Built | Decisions, notes, search, onboarding — 73 tests |
-| Workspace Engine | ✅ Built | 12 subcommands, Git integration, PR/issue display |
-| Plugin Runtime v2 | ✅ Built | Install/remove/enable/disable/run, event hooks, sample plugin |
-| GitHub Integration | ✅ Built | Auth, PR/issue CRUD, workspace linking |
-| TUI Framework | ❌ Not built | No `internal/tui/` directory |
-| CI/CD | ❌ Not built | No `.github/workflows/` |
-
-**Test stats:** 9 test files, ~128 tests, all pass with `go test -race ./...`
+| Document | Description |
+|---|---|
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | High-level architecture overview |
+| [`docs/ARCHITECTURE_GIT.md`](docs/ARCHITECTURE_GIT.md) | Git adapter design |
+| [`docs/ARCHITECTURE_WORKSPACES.md`](docs/ARCHITECTURE_WORKSPACES.md) | Workspace engine design |
+| [`docs/ARCHITECTURE_INTEGRATION.md`](docs/ARCHITECTURE_INTEGRATION.md) | Event-driven integration layer |
+| [`docs/ARCHITECTURE_PLUGINS.md`](docs/ARCHITECTURE_PLUGINS.md) | Plugin runtime v2 design |
+| [`docs/ARCHITECTURE_GITHUB.md`](docs/ARCHITECTURE_GITHUB.md) | GitHub integration design |
+| [`ROADMAP.md`](ROADMAP.md) | Project roadmap and future plans |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
 
 ---
 
@@ -168,64 +181,24 @@ User types command
 
 - Go 1.25+
 - Git
+- (Optional) [golangci-lint](https://golangci-lint.run/) for linting
 
 ### Build & Test
 
 ```bash
-make build        # produces bin/got
-make test         # run unit tests
-make test-race    # run tests with race detector
-make vet          # run go vet
-make ci           # fmt-check + lint + vet + test + check-paths
+make build          # compile to bin/got
+make test           # run unit tests
+make test-race      # tests with race detector
+make ci             # full CI gate: fmt-check + lint + vet + test + check-paths
 ```
 
-### Quick Smoke Test
+### Shell Completions
 
 ```bash
-make smoke        # build + run got --help
-./bin/got version # print version
-```
-
-### Adding a Migration
-
-1. Create `internal/store/migrations/000N_description.sql`
-2. Add the migration filename to `internal/store/store.go`'s migration order
-3. Run `make test` to verify
-
----
-
-## Documentation
-
-| File | Content |
-|------|---------|
-| `ARCHITECTURE.md` | High-level architecture overview |
-| `ARCHITECTURE_WORKSPACES.md` | Workspace Engine design |
-| `ARCHITECTURE_GIT.md` | Git Adapter design |
-| `ARCHITECTURE_INTEGRATION.md` | Event-driven integration layer |
-| `ARCHITECTURE_PLUGINS.md` | Plugin Runtime v2 design |
-| `ARCHITECTURE_GITHUB.md` | GitHub integration design |
-| `got-spec.md` | Original v0.1 spec (outdated) |
-| `TEMP.md` | Full implementation status report |
-
----
-
-## Project Structure
-
-```
-got/
-├── cmd/got/main.go          # Entrypoint
-├── internal/                # All Go packages
-│   ├── cli/                 # CLI commands (Cobra)
-│   ├── git/                 # Git adapter
-│   ├── store/               # SQLite storage
-│   ├── events/              # Event bus
-│   └── version/             # Version stamping
-├── testdata/
-│   └── hello-plugin/        # Sample plugin
-├── Makefile
-├── go.mod / go.sum
-├── *.md                     # Documentation
-└── LICENSE                  # MIT
+got completion bash > /etc/bash_completion.d/got
+got completion zsh > "${fpath[1]}/_got"
+got completion fish > ~/.config/fish/completions/got.fish
+got completion powershell > got.ps1
 ```
 
 ---

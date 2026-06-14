@@ -2,7 +2,7 @@ run:
   timeout: 5m
   tests: true
 
-# Linter set matches got-spec.md §3 exactly. Add new linters only via
+# Linter set matches the project spec. Add new linters only via
 # a spec update so the CI gate stays predictable.
 linters:
   disable-all: true

@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -14,9 +15,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/git"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/git"
+	"github.com/supunhg/got/internal/store"
 )
 
 // newDecisionCmd returns the `got decision` command tree. It is the

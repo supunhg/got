@@ -1,14 +1,15 @@
 // Command got is a Git-native developer operating layer.
 //
-// See ARCHITECTURE.md for the high-level design and got-spec.md for the
-// binding v0.1 specification.
+// Copyright 2026 The GOT Authors. MIT License.
+//
+// See docs/ARCHITECTURE.md for the high-level design.
 package main
 
 import (
 	"fmt"
 	"os"
 
-	"github.com/got-sh/got/internal/cli"
+	"github.com/supunhg/got/internal/cli"
 )
 
 func main() {

@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
-	"github.com/got-sh/got/internal/events"
+	"github.com/supunhg/got/internal/events"
 )
 
 // newTestStore creates a temporary SQLite database and returns a
@@ -153,8 +154,9 @@ func TestListDecisions(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	// Create two decisions.
+	// Create two decisions with a small delay to ensure deterministic ordering.
 	d1, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "First decision"})
+	time.Sleep(2 * time.Millisecond)
 	d2, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "Second decision"})
 
 	// List all.

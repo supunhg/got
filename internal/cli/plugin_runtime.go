@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -11,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/store"
-	"github.com/got-sh/got/internal/version"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/store"
+	"github.com/supunhg/got/internal/version"
 )
 
 const (

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/store"
 )
 
 // ── Tests ───────────────────────────────────────────────────────────

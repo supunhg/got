@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package git
 
 import (
@@ -5,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/got-sh/got/internal/events"
+	"github.com/supunhg/got/internal/events"
 )
 
 // GetStatus parses `git status --porcelain` to produce a structured Status.

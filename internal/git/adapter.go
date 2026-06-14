@@ -1,6 +1,8 @@
 // Package git implements a thin Git adapter that shells out to the `git`
 // CLI via os/exec. Every operation is repository-scoped (no global state)
 // and can optionally publish events through the provided Event Bus.
+//
+// Copyright 2026 The GOT Authors. MIT License.
 package git
 
 import (
@@ -11,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/got-sh/got/internal/events"
+	"github.com/supunhg/got/internal/events"
 )
 
 // ── Domain types ────────────────────────────────────────────────────

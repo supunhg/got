@@ -1,7 +1,6 @@
 # GOT — Git-native developer operating layer
 #
-# See ARCHITECTURE.md for the high-level design and got-spec.md for the
-# binding v0.1 specification.
+# See docs/ARCHITECTURE.md for the high-level design.
 
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
@@ -17,9 +16,9 @@ DATE    ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 GO      ?= go
 BIN     := bin/got
 LDFLAGS := -s -w \
-           -X github.com/got-sh/got/internal/version.Version=$(VERSION) \
-           -X github.com/got-sh/got/internal/version.Commit=$(COMMIT) \
-           -X github.com/got-sh/got/internal/version.Date=$(DATE)
+           -X github.com/supunhg/got/internal/version.Version=$(VERSION) \
+           -X github.com/supunhg/got/internal/version.Commit=$(COMMIT) \
+           -X github.com/supunhg/got/internal/version.Date=$(DATE)
 
 # ---- Targets ------------------------------------------------------------
 .PHONY: help build run smoke test test-race lint fmt fmt-check vet tidy clean ci check-paths
@@ -72,7 +71,7 @@ clean: ## Remove build artifacts
 # See got-spec.md §18 for the canonical ordering.
 ci: fmt-check lint vet test check-paths
 
-# Locks in the got-sh/got module path. Fails if any stray "org" placeholder
+# Locks in the supunhg/got module path. Fails if any stray "org" placeholder
 # (written with angle brackets, as in the spec) remains in code, YAML, or
 # shell. Documentation (markdown) is excluded — it uses the same notation
 # as a documented rename example. See got-spec.md §23.
@@ -80,7 +79,7 @@ check-paths:
 	@bad=$$(grep -rnE '<'"'"'?org'"'"'?>' \
 		--include='*.go' --include='*.yml' --include='*.yaml' \
 		--include='*.sh' --include='Makefile' --include='*.mk' \
-		. 2>/dev/null | grep -v '^./got-spec.md' || true); \
+		. 2>/dev/null | grep -v '^./docs/got-spec.md' || true); \
 	if [ -n "$$bad" ]; then \
 		echo "stray org placeholders found:"; \
 		echo "$$bad"; \

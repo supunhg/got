@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package store
 
 import (
@@ -10,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/got-sh/got/internal/events"
+	"github.com/supunhg/got/internal/events"
 )
 
 // ── Domain types ────────────────────────────────────────────────────
@@ -370,6 +371,7 @@ var (
 	ErrDuplicateWorkspace    = fmt.Errorf("workspace with this name already exists")
 	ErrPluginNotFound        = fmt.Errorf("plugin not found")
 	ErrDuplicatePlugin       = fmt.Errorf("plugin with this name already exists")
+	ErrSnapshotNotFound      = fmt.Errorf("snapshot not found")
 )
 
 // ── KnowledgeStore ──────────────────────────────────────────────────

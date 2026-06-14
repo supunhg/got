@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (

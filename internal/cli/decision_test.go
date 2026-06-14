@@ -10,7 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/store"
 )
 
 // testCLIEnv sets up a temporary directory with an initialised .got/

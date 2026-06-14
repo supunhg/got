@@ -2,6 +2,8 @@
 // package that should depend on Cobra; the rest of the codebase stays
 // Cobra-agnostic so domain logic can be unit-tested without spinning up
 // a command tree.
+//
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -14,9 +16,9 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/store"
-	"github.com/got-sh/got/internal/version"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/store"
+	"github.com/supunhg/got/internal/version"
 )
 
 // Global shared bus and plugin runtime for event-driven plugins.
@@ -55,7 +57,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.SetVersionTemplate("{{.Version}}\n")
 
 	// Persistent flags available on every subcommand. The set matches
-	// §13 of got-spec.md. The defaults match the spec too.
+	// §13 of the spec. The defaults match the spec too.
 	pf := cmd.PersistentFlags()
 	pf.String("cwd", "", "operate on a different directory")
 	pf.Bool("no-color", false, "disable lip gloss styles")
@@ -105,6 +107,10 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newBranchCmd())
 	cmd.AddCommand(newGraphCmd())
 	cmd.AddCommand(newRemoteCmd())
+	cmd.AddCommand(newCompletionCmd())
+	cmd.AddCommand(newHealthCmd())
+	cmd.AddCommand(newSnapshotCmd())
+	cmd.AddCommand(newSafeCmd())
 
 	return cmd
 }

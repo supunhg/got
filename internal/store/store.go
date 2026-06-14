@@ -2,11 +2,10 @@
 // provides a minimal migration runner using embedded SQL files and
 // sub-store accessors for each domain (knowledge, workspaces, etc.).
 //
-// For v0.4 only the Knowledge Engine sub-store is implemented. The
-// migration framework is intentionally lightweight — it reads and
+// Copyright 2026 The GOT Authors. MIT License.
+//
+// The migration framework is intentionally lightweight — it reads and
 // executes .sql files embedded via //go:embed in filename order.
-// A future version may replace this with golang-migrate/migrate/v4
-// (as specified in got-spec.md §3) when more migrations exist.
 package store
 
 import (

@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -10,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/store"
 )
 
 // newOnboardCmd returns the `got onboard` command tree.

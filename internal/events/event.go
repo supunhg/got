@@ -2,6 +2,7 @@
 // pub/sub communication. It is designed for the v0.4 Knowledge Engine and
 // is intentionally simple — no persistence, no delivery guarantees beyond
 // best-effort synchronous dispatch to subscribers, no wildcard patterns.
+// Copyright 2026 The GOT Authors. MIT License.
 package events
 
 import (

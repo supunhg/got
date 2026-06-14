@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/got-sh/got/internal/events"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/store"
 )
 
 // setupGitHubTest creates a temp GOT environment with store and bus, plus

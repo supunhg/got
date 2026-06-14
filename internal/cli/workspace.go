@@ -1,3 +1,4 @@
+// Copyright 2026 The GOT Authors. MIT License.
 package cli
 
 import (
@@ -12,8 +13,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/got-sh/got/internal/git"
-	"github.com/got-sh/got/internal/store"
+	"github.com/supunhg/got/internal/git"
+	"github.com/supunhg/got/internal/store"
 )
 
 // newWorkspaceCmd returns the `got workspace` command tree.
@@ -45,6 +46,7 @@ organizational units for human intent.`,
 	cmd.AddCommand(newWorkspaceRemoveBranchCmd())
 	cmd.AddCommand(newWorkspaceStatusCmd())
 	cmd.AddCommand(newWorkspaceSyncCmd())
+	cmd.AddCommand(newWorkspaceDiffCmd())
 
 	return cmd
 }
