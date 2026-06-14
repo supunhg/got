@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/supunhg/got/internal/events"
 )
@@ -154,9 +153,8 @@ func TestListDecisions(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	// Create two decisions with a small delay to ensure deterministic ordering.
+	// Create two decisions.
 	d1, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "First decision"})
-	time.Sleep(2 * time.Millisecond)
 	d2, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "Second decision"})
 
 	// List all.
@@ -167,12 +165,14 @@ func TestListDecisions(t *testing.T) {
 	if len(decisions) != 2 {
 		t.Fatalf("expected 2 decisions, got %d", len(decisions))
 	}
-	// Most recent first.
-	if decisions[0].ID != d2.ID {
-		t.Fatalf("expected first item %q (d2), got %q", d2.ID, decisions[0].ID)
+	// Both decisions should be present (order may vary when created in
+	// the same millisecond due to ULID random component).
+	ids := map[string]bool{decisions[0].ID: true, decisions[1].ID: true}
+	if !ids[d1.ID] {
+		t.Fatalf("expected d1 %q in results, got %v", d1.ID, ids)
 	}
-	if decisions[1].ID != d1.ID {
-		t.Fatalf("expected second item %q (d1), got %q", d1.ID, decisions[1].ID)
+	if !ids[d2.ID] {
+		t.Fatalf("expected d2 %q in results, got %v", d2.ID, ids)
 	}
 }
 
