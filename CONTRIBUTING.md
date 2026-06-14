@@ -38,7 +38,6 @@ internal/
 ├── events/        Event bus
 └── version/       Build version info
 testdata/          Test fixtures and sample plugins
-docs/              Architecture and design docs
 ```
 
 ## How to Contribute

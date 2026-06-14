@@ -2,7 +2,7 @@
 
 GOT is a Git-native developer operating layer. This document outlines what's built, what's in progress, and what's planned.
 
-## Current Status (v0.5)
+## Current Status (v1.0.0)
 
 | Feature | Status | Details |
 |---|---|---|
@@ -13,6 +13,8 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 | Plugin Runtime v2 | ✅ Complete | Install/remove/enable/disable/run, event hooks, sample plugin |
 | GitHub Integration | ✅ Complete | Auth, PR/issue CRUD, review, merge, diff, workspace linking |
 | Event System | ✅ Complete | 21 event types, thread-safe pub/sub, event logger |
+| Snapshot Engine | ✅ Complete | Create/list/show/delete, auto-snapshot before destructive ops |
+| Safe Operations | ✅ Complete | `got safe reset/push/rebase` with automatic snapshots |
 | CI/CD | ✅ Complete | GitHub Actions, GoReleaser, cross-platform builds |
 | Shell Completions | ✅ Complete | bash, zsh, fish, powershell via `got completion` |
 | Health Check | ✅ Complete | `got health` validates .got/, DB, Git, workspace consistency |
@@ -41,43 +43,28 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - Plugin runtime v2: install, hooks, event bus, subprocess isolation
 - PR reviews and merge tracking
 
-## Next Up (v0.6)
+### v0.6 — Snapshots & Safe Operations
+- Snapshot engine: create/list/show/delete recovery points
+- Automatic snapshots before destructive operations
+- `got safe reset/push/rebase` with safety net
+- Shell completions (bash, zsh, fish, powershell)
+- Health check command
 
-### Snapshot Engine
-- Recovery points before destructive operations
-- `got snapshot create` / `got snapshot restore`
-- Automatic snapshots before `reset`, `rebase`, `force push`
+### v1.0.0 — Stable Release
+- All features stable and tested (comprehensive test coverage, race-clean)
+- Cross-platform builds (darwin/linux/windows × amd64/arm64)
+- GitHub Actions CI/CD with GoReleaser
+- CLI-level tests for all new commands
 
-### Safe Operations
-- `got safe reset` — reset with automatic snapshot
-- `got safe rebase` — rebase with recovery point
-- `got safe push --force-with-lease` — force push with safety net
+## Next Up (v1.1)
 
-## Future (v0.7 — v1.0)
-
-### Health Engine
-- Stale branch detection
-- Repository analytics (churn, ownership, commit frequency)
-- `got health` reports
-
-### Advanced Workspace Features
-- Workspace templates
-- Cross-workspace search
-- Workspace-aware graph view
-
-### Platform Expansion
-- GitLab integration plugin
-- Bitbucket integration plugin
-- CI/CD integrations (GitHub Actions, GitLab CI)
-
-### TUI Dashboard
+### Rich TUI
 - Interactive terminal dashboard with Bubbletea
 - Status, branches, remotes, graph, plugins tabs
 
-### AI Integration
-- Commit message suggestions
-- Decision drafting assistance
-- Code review suggestions
+### E2E Test Suite
+- testscript scenarios for all major workflows
+- Integration test coverage
 
 ## Design Principles
 

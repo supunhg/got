@@ -1,8 +1,7 @@
 // Command got is a Git-native developer operating layer.
 //
 // Copyright 2026 The GOT Authors. MIT License.
-//
-// See docs/ARCHITECTURE.md for the high-level design.
+
 package main
 
 import (

@@ -21,3 +21,10 @@ Thumbs.db
 
 # Temp / scratch
 TEMP.md
+dist/
+
+# VM / shared data
+vm_shared_data/
+
+# Internal dev docs (architecture specs, design docs)
+docs/

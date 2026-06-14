@@ -54,7 +54,7 @@ GOT adds these capabilities as a thin layer on top of Git:
 | Scattered notes about architecture decisions | `got decision create` for structured, searchable ADRs |
 | "Read the code" onboarding | `got onboard start` with guided, skippable steps |
 | Switch between `git` and `gh` CLI | `got github pr create` links PRs to workspaces automatically |
-| Hope nobody force-pushes | Safe operations with recovery snapshots (planned) |
+| Hope nobody force-pushes | Safe operations with automatic recovery snapshots |
 
 ---
 
@@ -123,7 +123,7 @@ got plugin list                   # show installed plugins
 got plugin run hello-world greet  # run a plugin command
 ```
 
-Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as isolated subprocesses. See [`docs/ARCHITECTURE_PLUGINS.md`](docs/ARCHITECTURE_PLUGINS.md) for the full protocol.
+Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as isolated subprocesses.
 
 ---
 
@@ -133,7 +133,7 @@ Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as
 2. **Metadata is isolated.** Everything lives in `.got/`. Add it to `.gitignore` and Git stays clean.
 3. **Offline-first.** No network calls except those you initiate (`git push`, `got github`).
 4. **Plugin-first.** Core features use the same event bus and plugin API available to extensions.
-5. **Recoverable.** Every operation is designed to be undoable (snapshots coming in v0.2).
+5. **Recoverable.** Destructive operations create automatic snapshots for safety.
 
 ---
 
@@ -156,22 +156,13 @@ internal/
 - **SQLite with migrations** — pure Go, WAL mode, zero external dependencies.
 - **Interface-based Git adapter** — mockable in tests, swappable to libgit2 later.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design.
-
 ---
 
-## Documentation
+## Contributing
 
-| Document | Description |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | High-level architecture overview |
-| [`docs/ARCHITECTURE_GIT.md`](docs/ARCHITECTURE_GIT.md) | Git adapter design |
-| [`docs/ARCHITECTURE_WORKSPACES.md`](docs/ARCHITECTURE_WORKSPACES.md) | Workspace engine design |
-| [`docs/ARCHITECTURE_INTEGRATION.md`](docs/ARCHITECTURE_INTEGRATION.md) | Event-driven integration layer |
-| [`docs/ARCHITECTURE_PLUGINS.md`](docs/ARCHITECTURE_PLUGINS.md) | Plugin runtime v2 design |
-| [`docs/ARCHITECTURE_GITHUB.md`](docs/ARCHITECTURE_GITHUB.md) | GitHub integration design |
-| [`ROADMAP.md`](ROADMAP.md) | Project roadmap and future plans |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | How to contribute |
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for development setup, code conventions, and how to submit changes.
+
+See [`ROADMAP.md`](ROADMAP.md) for the project roadmap.
 
 ---
 

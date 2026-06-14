@@ -1,6 +1,6 @@
 # GOT — Git-native developer operating layer
 #
-# See docs/ARCHITECTURE.md for the high-level design.
+
 
 SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
@@ -79,7 +79,7 @@ check-paths:
 	@bad=$$(grep -rnE '<'"'"'?org'"'"'?>' \
 		--include='*.go' --include='*.yml' --include='*.yaml' \
 		--include='*.sh' --include='Makefile' --include='*.mk' \
-		. 2>/dev/null | grep -v '^./docs/got-spec.md' || true); \
+		. 2>/dev/null || true); \
 	if [ -n "$$bad" ]; then \
 		echo "stray org placeholders found:"; \
 		echo "$$bad"; \
