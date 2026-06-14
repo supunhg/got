@@ -2,7 +2,7 @@
 // provides a minimal migration runner using embedded SQL files and
 // sub-store accessors for each domain (knowledge, workspaces, etc.).
 //
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 //
 // The migration framework is intentionally lightweight — it reads and
 // executes .sql files embedded via //go:embed in filename order.

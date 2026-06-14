@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 //
 // Package version exposes the GOT binary's build-time identity. The
 // Version, Commit, and Date variables are intended to be overridden at

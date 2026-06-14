@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package git
 
 import (
@@ -160,7 +160,7 @@ func (a *ExecAdapter) Pull(ctx context.Context, remote, branch string) (*PullRes
 	return result, nil
 }
 
-// GetGraph returns the commit graph structure for visualisation.
+// GetGraph returns the commit graph structure for visualization.
 // Uses git log --graph format to get parent-child relationships.
 func (a *ExecAdapter) GetGraph(ctx context.Context, branch string, maxCount int) ([]GraphNode, error) {
 	args := []string{"log", "--format=%H|%P|%s|%D", "--max-count=" + fmt.Sprintf("%d", maxCount)}

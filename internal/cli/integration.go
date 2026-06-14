@@ -4,7 +4,7 @@
 // This is the "glue" that makes the system feel cohesive: commits
 // automatically update workspace activity, branches get tracked, and
 // knowledge artifacts get linked to the right commits.
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (

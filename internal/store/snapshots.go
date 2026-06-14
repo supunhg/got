@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package store
 
 import (
@@ -91,7 +91,7 @@ func (ks *KnowledgeStore) ListSnapshots(ctx context.Context, limit int) ([]Snaps
 		SELECT id, created_at, reason, ref, COALESCE(reflog_sel, ''),
 		       COALESCE(stash_ref, ''), COALESCE(metadata, '{}')
 		FROM snapshots
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT ?`, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list snapshots: %w", err)

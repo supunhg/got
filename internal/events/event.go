@@ -2,7 +2,7 @@
 // pub/sub communication. It is designed for the v0.4 Knowledge Engine and
 // is intentionally simple — no persistence, no delivery guarantees beyond
 // best-effort synchronous dispatch to subscribers, no wildcard patterns.
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package events
 
 import (
@@ -77,7 +77,7 @@ const (
 
 // ── Typed payloads ──────────────────────────────────────────────────
 // Each payload struct corresponds to one EventType constant. The structs
-// are serialised to JSON when written to the durable event_log table but
+// are serialized to JSON when written to the durable event_log table but
 // passed as-is through the in-memory Bus.
 
 // DecisionCreatedPayload is published after a decision is created.

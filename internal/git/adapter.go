@@ -2,7 +2,7 @@
 // CLI via os/exec. Every operation is repository-scoped (no global state)
 // and can optionally publish events through the provided Event Bus.
 //
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package git
 
 import (
@@ -116,7 +116,7 @@ type GitAdapter interface {
 	Push(ctx context.Context, remote, branch string, force bool) (*PushResult, error)
 	Pull(ctx context.Context, remote, branch string) (*PullResult, error)
 
-	// Graph returns the commit graph structure for visualisation.
+	// Graph returns the commit graph structure for visualization.
 	GetGraph(ctx context.Context, branch string, maxCount int) ([]GraphNode, error)
 }
 

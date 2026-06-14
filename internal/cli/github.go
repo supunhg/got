@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (
@@ -459,7 +459,7 @@ func runGitHubPRStatus(cmd *cobra.Command, arg string) error {
 	if listErr == nil && len(storedReviews) > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "\nReviews (GOT): %d\n", len(storedReviews))
 		for _, r := range storedReviews {
-			stateLabel := r.State
+			var stateLabel string
 			if r.State == "APPROVED" {
 				stateLabel = "approved"
 			} else if r.State == "CHANGES_REQUESTED" {

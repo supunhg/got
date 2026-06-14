@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package events
 
 import (
@@ -35,7 +35,7 @@ type Bus struct {
 	closed bool
 }
 
-// New creates and returns an initialised, ready-to-use Bus.
+// New creates and returns an initialized, ready-to-use Bus.
 func New() *Bus {
 	return &Bus{
 		subs: make(map[string][]subscription),

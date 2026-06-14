@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (
@@ -36,7 +36,7 @@ Examples:
 		Args: cobra.MaximumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// No args -> list.
-			return runBranchList(cmd, false)
+			return runBranchList(cmd)
 		},
 	}
 
@@ -91,8 +91,8 @@ func newBranchCheckoutCmd() *cobra.Command {
 	return cmd
 }
 
-func runBranchList(cmd *cobra.Command, jsonOut bool) error {
-	jsonOut, _ = cmd.Flags().GetBool("json")
+func runBranchList(cmd *cobra.Command) error {
+	jsonOut, _ := cmd.Flags().GetBool("json")
 
 	ctx := context.Background()
 

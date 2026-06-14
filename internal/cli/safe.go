@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (
@@ -93,9 +93,7 @@ Examples:
   got safe reset --soft HEAD~1
   got safe reset --mixed HEAD~1
   got safe reset --hard HEAD~3`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSafeReset(cmd, args)
-		},
+		RunE: runSafeReset,
 	}
 
 	cmd.Flags().String("mode", "mixed", "Reset mode: soft, mixed, hard")
@@ -157,9 +155,7 @@ Examples:
   got safe push origin main
   got safe push origin feature-branch`,
 		Args: cobra.RangeArgs(1, 2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return runSafePush(cmd, args)
-		},
+		RunE: runSafePush,
 	}
 
 	return cmd

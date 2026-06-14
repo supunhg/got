@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package store
 
 import (
@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/supunhg/got/internal/events"
@@ -137,7 +138,7 @@ type SearchResult struct {
 	Score       int     `json:"score"` // number of fields matched (crude relevance)
 }
 
-// OnboardingProgress summarises the scanning progress for a session.
+// OnboardingProgress summarizes the scanning progress for a session.
 type OnboardingProgress struct {
 	Session    OnboardingSession       `json:"session"`
 	ByType     map[string]TypeProgress `json:"by_type"`
@@ -1758,7 +1759,7 @@ func (ks *KnowledgeStore) ListWorkspaceCommits(ctx context.Context, workspaceNam
 	rows, err := ks.db.QueryContext(ctx, `
 		SELECT id, workspace_id, commit_sha, COALESCE(branch_name, ''), COALESCE(message, ''), created_at
 		FROM workspace_commits WHERE workspace_id = ?
-		ORDER BY created_at DESC
+		ORDER BY created_at DESC, id DESC
 		LIMIT ?`, w.ID, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list workspace commits: %w", err)
@@ -2319,21 +2320,42 @@ func scanPlugins(rows *sql.Rows) ([]Plugin, error) {
 
 // newULID generates a ULID-like identifier: 10 chars of base32-encoded
 // timestamp (milliseconds) + 16 chars of base32-encoded random bytes.
+// Within the same millisecond, the random component is monotonically
+// incremented so that IDs sort in creation order.
 func newULID() string {
+	ulidMu.Lock()
+	defer ulidMu.Unlock()
+
 	// Timestamp component: current time in ms, 10 base32 chars.
 	ts := time.Now().UnixMilli()
+	actualTS := ts // save before the shift loop clobbers it
 	var buf [10]byte
 	for i := 9; i >= 0; i-- {
 		buf[i] = ulidEncoding[ts&0x1F]
 		ts >>= 5
 	}
 
-	// Random component: 80 bits (16 base32 chars) from crypto/rand.
-	randBytes := make([]byte, 10)
-	if _, err := rand.Read(randBytes); err != nil {
-		// Fallback: use nanosecond timestamp bits.
-		fallback := time.Now().UnixNano()
-		binary.LittleEndian.PutUint64(randBytes[:8], uint64(fallback))
+	// Random component: 80 bits (16 base32 chars).
+	// Within the same millisecond, increment the previous random bytes
+	// to guarantee monotonic ordering. Otherwise, draw fresh random bytes.
+	var randBytes [10]byte
+	if actualTS == lastULIDTime {
+		// Carry-propagate increment on the previous random bytes.
+		for i := 9; i >= 0; i-- {
+			lastULIDRand[i]++
+			if lastULIDRand[i] != 0 {
+				break
+			}
+		}
+		randBytes = lastULIDRand
+	} else {
+		if _, err := rand.Read(randBytes[:]); err != nil {
+			// Fallback: use nanosecond timestamp bits.
+			fallback := time.Now().UnixNano()
+			binary.LittleEndian.PutUint64(randBytes[:8], uint64(fallback))
+		}
+		lastULIDRand = randBytes
+		lastULIDTime = actualTS
 	}
 
 	// Encode 10 random bytes (80 bits) into 16 base32 chars.
@@ -2360,6 +2382,13 @@ func newULID() string {
 // ulidEncoding is Crockford's base32 encoding (excluding I, L, O, U for
 // readability — though ULID spec uses all 32 chars).
 var ulidEncoding = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"
+
+// ulidMu guards lastULIDTime and lastULIDRand for monotonic ULID generation.
+var (
+	ulidMu       sync.Mutex
+	lastULIDTime int64
+	lastULIDRand [10]byte
+)
 
 // scanDecisions scans decision rows into a slice.
 func scanDecisions(rows *sql.Rows) ([]Decision, error) {

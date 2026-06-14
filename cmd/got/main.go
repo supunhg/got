@@ -1,6 +1,6 @@
 // Command got is a Git-native developer operating layer.
 //
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 
 package main
 

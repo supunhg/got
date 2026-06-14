@@ -1,4 +1,4 @@
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (
@@ -18,7 +18,7 @@ func TestSnapshotCreate(t *testing.T) {
 	dir, s, cleanup := testCLIEnv(t)
 	defer cleanup()
 
-	// Initialise a Git repo so findRepoRoot works.
+	// Initialize a Git repo so findRepoRoot works.
 	initTestGitRepo(t, dir)
 
 	_ = s
@@ -166,7 +166,7 @@ func TestHealth_WithGotDir(t *testing.T) {
 	defer cleanup()
 	_ = s
 
-	// Initialise a Git repo so findRepoRoot works.
+	// Initialize a Git repo so findRepoRoot works.
 	initTestGitRepo(t, dir)
 
 	cmd, buf := newTestCmd()
@@ -330,7 +330,7 @@ func TestSafeReset_InvalidMode(t *testing.T) {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-// initTestGitRepo initialises a Git repository in the given directory
+// initTestGitRepo initializes a Git repository in the given directory
 // with a minimal commit so HEAD exists. If the directory already
 // contains a .git directory, it is a no-op.
 func initTestGitRepo(t *testing.T, dir string) {

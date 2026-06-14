@@ -3,7 +3,7 @@
 // Cobra-agnostic so domain logic can be unit-tested without spinning up
 // a command tree.
 //
-// Copyright 2026 The GOT Authors. MIT License.
+// Copyright 2026 Supun Hewagamage. MIT License.
 package cli
 
 import (
