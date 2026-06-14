@@ -407,6 +407,30 @@ func outputWorkspaceShow(cmd *cobra.Command, s *store.WorkspaceStatus) error {
 		}
 	}
 
+	if len(s.PullRequests) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n## Linked Pull Requests\n\n")
+		for _, pr := range s.PullRequests {
+			url := pr.URL
+			if url != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "- [#%d %s](%s) (%s)\n", pr.Number, pr.Title, url, pr.State)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "- #%d %s (%s)\n", pr.Number, pr.Title, pr.State)
+			}
+		}
+	}
+
+	if len(s.Issues) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "\n## Linked Issues\n\n")
+		for _, iss := range s.Issues {
+			url := iss.URL
+			if url != "" {
+				fmt.Fprintf(cmd.OutOrStdout(), "- [#%d %s](%s) (%s)\n", iss.Number, iss.Title, url, iss.State)
+			} else {
+				fmt.Fprintf(cmd.OutOrStdout(), "- #%d %s (%s)\n", iss.Number, iss.Title, iss.State)
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -932,6 +956,12 @@ func runWorkspaceStatus(cmd *cobra.Command, name string, jsonOut bool) error {
 	fmt.Fprintf(cmd.OutOrStdout(), "  Notes:       %d\n", len(status.Notes))
 	if len(status.Commits) > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "  Commits:     %d\n", len(status.Commits))
+	}
+	if len(status.PullRequests) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Pull Reqs:   %d\n", len(status.PullRequests))
+	}
+	if len(status.Issues) > 0 {
+		fmt.Fprintf(cmd.OutOrStdout(), "  Issues:      %d\n", len(status.Issues))
 	}
 	fmt.Fprintf(cmd.OutOrStdout(), "  Total items: %d\n", status.ItemCount)
 	if status.Workspace.LastCommitSHA != "" {

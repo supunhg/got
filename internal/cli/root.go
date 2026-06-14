@@ -99,6 +99,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newWorkspaceCmd())
 	cmd.AddCommand(newPluginCmd())
+	cmd.AddCommand(newGitHubCmd())
 	cmd.AddCommand(newStatusCmd())
 	cmd.AddCommand(newCommitCmd())
 	cmd.AddCommand(newBranchCmd())

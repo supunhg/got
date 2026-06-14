@@ -196,7 +196,8 @@ type WorkspaceBranch struct {
 
 // WorkspaceStatus holds a summary of a workspace's contents — metadata,
 // tracked files, tracked branches, linked decisions, linked notes, linked
-// commits, item count, and last activity timestamp.
+// commits, linked pull requests, linked issues, item count, and last
+// activity timestamp.
 type WorkspaceStatus struct {
 	Workspace    Workspace          `json:"workspace"`
 	Files        []WorkspaceFile   `json:"files"`
@@ -204,6 +205,8 @@ type WorkspaceStatus struct {
 	Decisions    []Decision         `json:"decisions"`
 	Notes        []Note             `json:"notes"`
 	Commits      []WorkspaceCommit  `json:"commits,omitempty"`
+	PullRequests []PullRequest     `json:"pull_requests,omitempty"`
+	Issues       []Issue           `json:"issues,omitempty"`
 	ItemCount    int               `json:"item_count"`
 	LastActivity int64              `json:"last_activity"`
 }
@@ -229,6 +232,65 @@ type UpdateWorkspaceParams struct {
 	Description *string
 	Status      *string // active | archived
 	Tags        []string // nil = no change, empty = clear
+}
+
+// ── GitHub domain types ──────────────────────────────────────────
+
+// PullRequest represents a GitHub pull request tracked in GOT.
+type PullRequest struct {
+	ID          string `json:"id"`
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	State       string `json:"state"`          // open, closed, merged
+	Branch      string `json:"branch"`         // head branch
+	Base        string `json:"base"`            // target branch
+	URL         string `json:"url,omitempty"`
+	WorkspaceID string `json:"workspace_id,omitempty"`
+	CreatedAt   int64  `json:"created_at"`
+	UpdatedAt   int64  `json:"updated_at"`
+}
+
+// Issue represents a GitHub issue tracked in GOT.
+type Issue struct {
+	ID          string   `json:"id"`
+	Number      int      `json:"number"`
+	Title       string   `json:"title"`
+	State       string   `json:"state"`          // open, closed
+	Labels      []string `json:"labels,omitempty"`
+	URL         string   `json:"url,omitempty"`
+	WorkspaceID string   `json:"workspace_id,omitempty"`
+	CreatedAt   int64    `json:"created_at"`
+	UpdatedAt   int64    `json:"updated_at"`
+}
+
+// GitHubConfig stores the GitHub integration configuration.
+type GitHubConfig struct {
+	Token      string `json:"token,omitempty"`
+	Owner      string `json:"owner"`
+	Repo       string `json:"repo"`
+	BaseBranch string `json:"base_branch"`
+	UpdatedAt  int64  `json:"updated_at"`
+}
+
+// CreatePullRequestParams holds fields for recording a PR in GOT.
+type CreatePullRequestParams struct {
+	Number      int
+	Title       string
+	State       string
+	Branch      string
+	Base        string
+	URL         string
+	WorkspaceID string
+}
+
+// CreateIssueParams holds fields for recording an issue in GOT.
+type CreateIssueParams struct {
+	Number      int
+	Title       string
+	State       string
+	Labels      []string
+	URL         string
+	WorkspaceID string
 }
 
 // ── Plugin domain types ───────────────────────────────────────────
@@ -1679,13 +1741,12 @@ func (ks *KnowledgeStore) UpdateWorkspaceLastCommit(ctx context.Context, workspa
 	}
 
 	return nil
-}
-
-// ── Workspace status ────────────────────────────────────────────────
+}	// ── Workspace status ────────────────────────────────────────────────
 
 // GetWorkspaceStatus returns a full summary of a workspace's contents —
-// its metadata, tracked files, tracked branches, linked decisions, and
-// linked notes. Also computes item count and last activity timestamp.
+// its metadata, tracked files, tracked branches, linked decisions, linked
+// notes, linked pull requests, and linked issues. Also computes item
+// count and last activity timestamp.
 func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName string) (*WorkspaceStatus, error) {
 	w, err := ks.GetWorkspace(ctx, workspaceName)
 	if err != nil {
@@ -1722,6 +1783,18 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 		commits = []WorkspaceCommit{}
 	}
 
+	// Fetch pull requests linked to this workspace.
+	prs, _ := ks.ListPullRequests(ctx, w.Name)
+	if prs == nil {
+		prs = []PullRequest{}
+	}
+
+	// Fetch issues linked to this workspace.
+	issues, _ := ks.ListIssues(ctx, w.Name)
+	if issues == nil {
+		issues = []Issue{}
+	}
+
 	// Compute last activity — include workspace_commits timestamps.
 	lastActivity := w.UpdatedAt
 	if w.CreatedAt > lastActivity {
@@ -1732,6 +1805,16 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 			lastActivity = c.CreatedAt
 		}
 	}
+	for _, pr := range prs {
+		if pr.CreatedAt > lastActivity {
+			lastActivity = pr.CreatedAt
+		}
+	}
+	for _, iss := range issues {
+		if iss.CreatedAt > lastActivity {
+			lastActivity = iss.CreatedAt
+		}
+	}
 
 	return &WorkspaceStatus{
 		Workspace:    *w,
@@ -1740,9 +1823,237 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 		Decisions:    decisions,
 		Notes:        notes,
 		Commits:      commits,
-		ItemCount:    totalItems + len(commits),
+		PullRequests: prs,
+		Issues:       issues,
+		ItemCount:    totalItems + len(commits) + len(prs) + len(issues),
 		LastActivity: lastActivity,
 	}, nil
+}
+
+// ── GitHub Config CRUD ──────────────────────────────────────────
+
+// GetGitHubConfig retrieves the GitHub integration configuration.
+// Returns nil if no config has been stored.
+func (ks *KnowledgeStore) GetGitHubConfig(ctx context.Context) (*GitHubConfig, error) {
+	cfg := &GitHubConfig{}
+	err := ks.db.QueryRowContext(ctx, `
+		SELECT token, COALESCE(owner, ''), COALESCE(repo, ''), COALESCE(base_branch, 'main'), updated_at
+		FROM github_config WHERE id = 'default'`,
+	).Scan(&cfg.Token, &cfg.Owner, &cfg.Repo, &cfg.BaseBranch, &cfg.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get github config: %w", err)
+	}
+	return cfg, nil
+}
+
+// SetGitHubConfig saves the GitHub integration configuration (upsert).
+func (ks *KnowledgeStore) SetGitHubConfig(ctx context.Context, cfg GitHubConfig) error {
+	now := nowMS()
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT INTO github_config (id, token, owner, repo, base_branch, updated_at)
+		VALUES ('default', ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			token = excluded.token,
+			owner = excluded.owner,
+			repo = excluded.repo,
+			base_branch = excluded.base_branch,
+			updated_at = excluded.updated_at`,
+		cfg.Token, cfg.Owner, cfg.Repo, cfg.BaseBranch, now)
+	if err != nil {
+		return fmt.Errorf("set github config: %w", err)
+	}
+	return nil
+}
+
+// ── Pull Request CRUD ───────────────────────────────────────────────
+
+// CreatePullRequest records a pull request in the store.
+func (ks *KnowledgeStore) CreatePullRequest(ctx context.Context, params CreatePullRequestParams) (*PullRequest, error) {
+	now := nowMS()
+	id := newULID()
+
+	pr := &PullRequest{
+		ID:          id,
+		Number:      params.Number,
+		Title:       params.Title,
+		State:       params.State,
+		Branch:      params.Branch,
+		Base:        params.Base,
+		URL:         params.URL,
+		WorkspaceID: params.WorkspaceID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO pull_requests (id, number, title, state, branch, base, url, workspace_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		pr.ID, pr.Number, pr.Title, pr.State, pr.Branch, pr.Base, pr.URL,
+		nullableWorkspaceID(params.WorkspaceID), pr.CreatedAt, pr.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create pull request: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventPullRequestCreated, events.PullRequestCreatedPayload{
+			Number:     pr.Number,
+			Title:      pr.Title,
+			Branch:     pr.Branch,
+			Base:       pr.Base,
+			URL:        pr.URL,
+			CreatedAt:  now,
+		})
+	}
+
+	return pr, nil
+}
+
+// ListPullRequests returns all tracked pull requests, optionally filtered by workspace.
+func (ks *KnowledgeStore) ListPullRequests(ctx context.Context, workspaceID string) ([]PullRequest, error) {
+	var rows *sql.Rows
+	var err error
+	if workspaceID != "" {
+		rows, err = ks.db.QueryContext(ctx, `
+			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			FROM pull_requests WHERE workspace_id = ?
+			ORDER BY created_at DESC`, workspaceID)
+	} else {
+		rows, err = ks.db.QueryContext(ctx, `
+			SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			FROM pull_requests ORDER BY created_at DESC`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list pull requests: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPullRequests(rows)
+}
+
+// GetPullRequestByNumber retrieves a pull request by its GitHub number.
+func (ks *KnowledgeStore) GetPullRequestByNumber(ctx context.Context, number int) (*PullRequest, error) {
+	pr := &PullRequest{}
+	err := ks.db.QueryRowContext(ctx, `
+		SELECT id, number, title, state, branch, base, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+		FROM pull_requests WHERE number = ?`, number,
+	).Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.CreatedAt, &pr.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, fmt.Errorf("pull request #%d not found", number)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get pull request: %w", err)
+	}
+	return pr, nil
+}
+
+// ── Issue CRUD ───────────────────────────────────────────────────────
+
+// CreateIssue records an issue in the store.
+func (ks *KnowledgeStore) CreateIssue(ctx context.Context, params CreateIssueParams) (*Issue, error) {
+	now := nowMS()
+	id := newULID()
+
+	labelsJSON := "[]"
+	if len(params.Labels) > 0 {
+		tj, _ := json.Marshal(params.Labels)
+		labelsJSON = string(tj)
+	}
+
+	iss := &Issue{
+		ID:          id,
+		Number:      params.Number,
+		Title:       params.Title,
+		State:       params.State,
+		Labels:      params.Labels,
+		URL:         params.URL,
+		WorkspaceID: params.WorkspaceID,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO issues (id, number, title, state, labels, url, workspace_id, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		iss.ID, iss.Number, iss.Title, iss.State, labelsJSON, iss.URL,
+		nullableWorkspaceID(params.WorkspaceID), iss.CreatedAt, iss.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("create issue: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventIssueCreated, events.IssueCreatedPayload{
+			Number:    iss.Number,
+			Title:     iss.Title,
+			Labels:    iss.Labels,
+			URL:       iss.URL,
+			CreatedAt: now,
+		})
+	}
+
+	return iss, nil
+}
+
+// ListIssues returns all tracked issues, optionally filtered by workspace.
+func (ks *KnowledgeStore) ListIssues(ctx context.Context, workspaceID string) ([]Issue, error) {
+	var rows *sql.Rows
+	var err error
+	if workspaceID != "" {
+		rows, err = ks.db.QueryContext(ctx, `
+			SELECT id, number, title, state, labels, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			FROM issues WHERE workspace_id = ?
+			ORDER BY created_at DESC`, workspaceID)
+	} else {
+		rows, err = ks.db.QueryContext(ctx, `
+			SELECT id, number, title, state, labels, COALESCE(url, ''), COALESCE(workspace_id, ''), created_at, updated_at
+			FROM issues ORDER BY created_at DESC`)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("list issues: %w", err)
+	}
+	defer rows.Close()
+
+	return scanIssues(rows)
+}
+
+// scanPullRequests scans pull_request rows into a slice.
+func scanPullRequests(rows *sql.Rows) ([]PullRequest, error) {
+	var prs []PullRequest
+	for rows.Next() {
+		var pr PullRequest
+		if err := rows.Scan(&pr.ID, &pr.Number, &pr.Title, &pr.State, &pr.Branch, &pr.Base, &pr.URL, &pr.WorkspaceID, &pr.CreatedAt, &pr.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan pull request: %w", err)
+		}
+		prs = append(prs, pr)
+	}
+	return prs, rows.Err()
+}
+
+// scanIssues scans issue rows into a slice.
+func scanIssues(rows *sql.Rows) ([]Issue, error) {
+	var issues []Issue
+	for rows.Next() {
+		var iss Issue
+		var labelsJSON string
+		if err := rows.Scan(&iss.ID, &iss.Number, &iss.Title, &iss.State, &labelsJSON, &iss.URL, &iss.WorkspaceID, &iss.CreatedAt, &iss.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan issue: %w", err)
+		}
+		if labelsJSON != "" && labelsJSON != "[]" {
+			_ = json.Unmarshal([]byte(labelsJSON), &iss.Labels)
+		}
+		issues = append(issues, iss)
+	}
+	return issues, rows.Err()
+}
+
+// nullableWorkspaceID returns the workspace ID string, or nil if empty.
+func nullableWorkspaceID(id string) interface{} {
+	if id == "" {
+		return nil
+	}
+	return id
 }
 
 // ── Plugin CRUD ───────────────────────────────────────────────────

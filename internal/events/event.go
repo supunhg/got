@@ -66,6 +66,10 @@ const (
 	EventOnboardingStarted      = "OnboardingStarted"
 	EventOnboardingItemCovered  = "OnboardingItemCovered"
 	EventOnboardingCompleted    = "OnboardingCompleted"
+
+	// GitHub integration
+	EventPullRequestCreated = "PullRequestCreated"
+	EventIssueCreated       = "IssueCreated"
 )
 
 // ── Typed payloads ──────────────────────────────────────────────────
@@ -271,4 +275,25 @@ type OnboardingCompletedPayload struct {
 	Participant string `json:"participant"`
 	TotalItems  int    `json:"total_items"`
 	CompletedAt int64  `json:"completed_at"`
+}
+
+// ── GitHub payloads ────────────────────────────────────────────
+
+// PullRequestCreatedPayload is published when a PR is created via GOT.
+type PullRequestCreatedPayload struct {
+	Number    int      `json:"number"`
+	Title     string   `json:"title"`
+	Branch    string   `json:"branch"`
+	Base      string   `json:"base"`
+	URL       string   `json:"url,omitempty"`
+	CreatedAt int64    `json:"created_at"`
+}
+
+// IssueCreatedPayload is published when an issue is created via GOT.
+type IssueCreatedPayload struct {
+	Number    int      `json:"number"`
+	Title     string   `json:"title"`
+	Labels    []string `json:"labels,omitempty"`
+	URL       string   `json:"url,omitempty"`
+	CreatedAt int64    `json:"created_at"`
 }
