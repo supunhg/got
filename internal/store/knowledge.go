@@ -158,13 +158,24 @@ type TypeProgress struct {
 
 // Workspace represents a logical grouping of related artifacts.
 type Workspace struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Status      string   `json:"status"`          // active | archived
-	Tags        []string `json:"tags,omitempty"`   // JSON array stored in DB
-	CreatedAt   int64    `json:"created_at"`
-	UpdatedAt   int64    `json:"updated_at"`
+	ID            string   `json:"id"`
+	Name          string   `json:"name"`
+	Description   string   `json:"description,omitempty"`
+	Status        string   `json:"status"`          // active | archived
+	Tags          []string `json:"tags,omitempty"`   // JSON array stored in DB
+	LastCommitSHA string   `json:"last_commit_sha,omitempty"` // most recent commit SHA
+	CreatedAt     int64    `json:"created_at"`
+	UpdatedAt     int64    `json:"updated_at"`
+}
+
+// WorkspaceCommit represents a commit recorded as activity in a workspace.
+type WorkspaceCommit struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	CommitSHA   string `json:"commit_sha"`
+	BranchName  string `json:"branch_name,omitempty"`
+	Message     string `json:"message,omitempty"`
+	CreatedAt   int64  `json:"created_at"`
 }
 
 // WorkspaceFile represents a file tracked in a workspace.
@@ -183,15 +194,18 @@ type WorkspaceBranch struct {
 	CreatedAt   int64  `json:"created_at"`
 }
 
-// WorkspaceStatus holds a summary of a workspace's contents.
+// WorkspaceStatus holds a summary of a workspace's contents — metadata,
+// tracked files, tracked branches, linked decisions, linked notes, linked
+// commits, item count, and last activity timestamp.
 type WorkspaceStatus struct {
-	Workspace   Workspace        `json:"workspace"`
-	Files       []WorkspaceFile  `json:"files"`
-	Branches    []WorkspaceBranch `json:"branches"`
-	Decisions   []Decision        `json:"decisions"`
-	Notes       []Note            `json:"notes"`
-	ItemCount   int              `json:"item_count"`
-	LastActivity int64            `json:"last_activity"`
+	Workspace    Workspace          `json:"workspace"`
+	Files        []WorkspaceFile   `json:"files"`
+	Branches     []WorkspaceBranch `json:"branches"`
+	Decisions    []Decision         `json:"decisions"`
+	Notes        []Note             `json:"notes"`
+	Commits      []WorkspaceCommit  `json:"commits,omitempty"`
+	ItemCount    int               `json:"item_count"`
+	LastActivity int64              `json:"last_activity"`
 }
 
 // CreateWorkspaceParams holds fields for creating a workspace.
@@ -201,12 +215,54 @@ type CreateWorkspaceParams struct {
 	Tags        []string
 }
 
+// AddWorkspaceCommitParams holds fields for adding a commit to a workspace.
+type AddWorkspaceCommitParams struct {
+	WorkspaceName string
+	CommitSHA     string
+	BranchName    string
+	Message       string
+}
+
 // UpdateWorkspaceParams holds fields for updating a workspace.
 type UpdateWorkspaceParams struct {
 	Name        *string
 	Description *string
 	Status      *string // active | archived
 	Tags        []string // nil = no change, empty = clear
+}
+
+// ── Plugin domain types ───────────────────────────────────────────
+
+// PluginManifest represents the contents of a plugin manifest.json file.
+type PluginManifest struct {
+	Name             string                  `json:"name"`
+	Version          string                  `json:"version"`
+	Description      string                  `json:"description,omitempty"`
+	Capabilities     []string                `json:"capabilities,omitempty"`
+	Events           []string                `json:"events,omitempty"`
+	Hooks            map[string]string       `json:"hooks,omitempty"`     // event type -> command/script
+	Commands         []PluginManifestCommand `json:"commands,omitempty"`
+	RequiresGotVersion string                `json:"requires_got_version,omitempty"`
+}
+
+// PluginManifestCommand describes a command the plugin exposes.
+type PluginManifestCommand struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Executable  string `json:"executable"` // relative path from plugin root, or "commands/<name>"
+}
+
+// Plugin represents an installed plugin in the database.
+type Plugin struct {
+	ID           string         `json:"id"`
+	Name         string         `json:"name"`
+	Version      string         `json:"version"`
+	Description  string         `json:"description,omitempty"`
+	Path         string         `json:"path"`
+	Enabled      bool           `json:"enabled"`
+	ManifestJSON string         `json:"manifest_json,omitempty"`
+	Manifest     *PluginManifest `json:"manifest,omitempty"` // parsed from manifest_json on read
+	InstalledAt  int64          `json:"installed_at"`
 }
 
 // ── Sentinel errors ─────────────────────────────────────────────────
@@ -222,6 +278,8 @@ var (
 	ErrSessionAlreadyComplete = fmt.Errorf("session is already completed")
 	ErrWorkspaceNotFound     = fmt.Errorf("workspace not found")
 	ErrDuplicateWorkspace    = fmt.Errorf("workspace with this name already exists")
+	ErrPluginNotFound        = fmt.Errorf("plugin not found")
+	ErrDuplicatePlugin       = fmt.Errorf("plugin with this name already exists")
 )
 
 // ── KnowledgeStore ──────────────────────────────────────────────────
@@ -393,7 +451,7 @@ func (ks *KnowledgeStore) ListAllDecisions(ctx context.Context) ([]Decision, err
 func (ks *KnowledgeStore) LinkDecision(ctx context.Context, params LinkDecisionParams) error {
 	// Validate link type.
 	switch params.LinkType {
-	case "commit", "file", "workspace":
+	case "commit", "file", "workspace", "branch":
 	default:
 		return ErrInvalidLinkType
 	}
@@ -735,6 +793,23 @@ func (ks *KnowledgeStore) DeleteNote(ctx context.Context, id string) error {
 		})
 	}
 
+	return nil
+}
+
+// UpdateNoteCommitHash sets the commit_hash field on an existing note
+// without changing its ID or any other fields. Returns ErrNoteNotFound
+// if the note does not exist.
+func (ks *KnowledgeStore) UpdateNoteCommitHash(ctx context.Context, id, commitHash string) error {
+	result, err := ks.db.ExecContext(ctx, `
+		UPDATE notes SET commit_hash = ?, updated_at = ? WHERE id = ?`,
+		commitHash, nowMS(), id)
+	if err != nil {
+		return fmt.Errorf("update note commit_hash: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNoteNotFound
+	}
 	return nil
 }
 
@@ -1214,11 +1289,11 @@ func (ks *KnowledgeStore) getWorkspaceBy(ctx context.Context, column, value stri
 	var tagsJSON string
 
 	query := fmt.Sprintf(`
-		SELECT id, name, description, status, tags, created_at, updated_at
+		SELECT id, name, description, status, tags, created_at, updated_at, COALESCE(last_commit_sha, '')
 		FROM workspaces WHERE %s = ?`, column)
 
 	err := ks.db.QueryRowContext(ctx, query, value).Scan(
-		&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt,
+		&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt, &w.LastCommitSHA,
 	)
 	if err == sql.ErrNoRows {
 		return nil, ErrWorkspaceNotFound
@@ -1238,7 +1313,7 @@ func (ks *KnowledgeStore) getWorkspaceBy(ctx context.Context, column, value stri
 // ListWorkspaces returns all workspaces, ordered by name.
 func (ks *KnowledgeStore) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	rows, err := ks.db.QueryContext(ctx, `
-		SELECT id, name, description, status, tags, created_at, updated_at
+		SELECT id, name, description, status, tags, created_at, updated_at, COALESCE(last_commit_sha, '')
 		FROM workspaces
 		ORDER BY name ASC`)
 	if err != nil {
@@ -1521,6 +1596,91 @@ func (ks *KnowledgeStore) ListWorkspaceBranches(ctx context.Context, workspaceNa
 	return scanWorkspaceBranches(rows)
 }
 
+// ── Workspace commits ────────────────────────────────────────────
+
+// AddWorkspaceCommit records a commit as activity in a workspace. Also
+// updates the workspace's last_commit_sha for fast access. Idempotent
+// (UNIQUE constraint on workspace_id + commit_sha).
+func (ks *KnowledgeStore) AddWorkspaceCommit(ctx context.Context, params AddWorkspaceCommitParams) (*WorkspaceCommit, error) {
+	w, err := ks.GetWorkspace(ctx, params.WorkspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	now := nowMS()
+	id := newULID()
+
+	c := &WorkspaceCommit{
+		ID:          id,
+		WorkspaceID: w.ID,
+		CommitSHA:   params.CommitSHA,
+		BranchName:  params.BranchName,
+		Message:     params.Message,
+		CreatedAt:   now,
+	}
+
+	_, err = ks.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO workspace_commits (id, workspace_id, commit_sha, branch_name, message, created_at)
+		VALUES (?, ?, ?, ?, ?, ?)`,
+		c.ID, c.WorkspaceID, c.CommitSHA, c.BranchName, c.Message, c.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("add workspace commit: %w", err)
+	}
+
+	// Update last_commit_sha on the workspace.
+	_, _ = ks.db.ExecContext(ctx, `
+		UPDATE workspaces SET last_commit_sha = ?, updated_at = ?
+		WHERE id = ? AND (? != '' OR last_commit_sha = '')`,
+		params.CommitSHA, now, w.ID, params.CommitSHA)
+
+	return c, nil
+}
+
+// ListWorkspaceCommits returns commits recorded for a workspace, ordered
+// by created_at (link time) descending.
+func (ks *KnowledgeStore) ListWorkspaceCommits(ctx context.Context, workspaceName string, limit int) ([]WorkspaceCommit, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	if limit <= 0 {
+		limit = 20
+	}
+
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, workspace_id, commit_sha, COALESCE(branch_name, ''), COALESCE(message, ''), created_at
+		FROM workspace_commits WHERE workspace_id = ?
+		ORDER BY created_at DESC
+		LIMIT ?`, w.ID, limit)
+	if err != nil {
+		return nil, fmt.Errorf("list workspace commits: %w", err)
+	}
+	defer rows.Close()
+
+	return scanWorkspaceCommits(rows)
+}
+
+// UpdateWorkspaceLastCommit updates just the last_commit_sha and updated_at
+// on a workspace without recording a workspace_commit entry. Used during
+// event-driven updates from the Git adapter.
+func (ks *KnowledgeStore) UpdateWorkspaceLastCommit(ctx context.Context, workspaceName, commitSHA string) error {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return err
+	}
+
+	now := nowMS()
+	_, err = ks.db.ExecContext(ctx, `
+		UPDATE workspaces SET last_commit_sha = ?, updated_at = ? WHERE id = ?`,
+		commitSHA, now, w.ID)
+	if err != nil {
+		return fmt.Errorf("update workspace last commit: %w", err)
+	}
+
+	return nil
+}
+
 // ── Workspace status ────────────────────────────────────────────────
 
 // GetWorkspaceStatus returns a full summary of a workspace's contents —
@@ -1556,10 +1716,21 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 
 	totalItems := len(files) + len(branches) + len(decisions) + len(notes)
 
-	// Compute last activity as max of all timestamps.
+	// Fetch recent commits linked to this workspace.
+	commits, _ := ks.ListWorkspaceCommits(ctx, workspaceName, 10)
+	if commits == nil {
+		commits = []WorkspaceCommit{}
+	}
+
+	// Compute last activity — include workspace_commits timestamps.
 	lastActivity := w.UpdatedAt
 	if w.CreatedAt > lastActivity {
 		lastActivity = w.CreatedAt
+	}
+	for _, c := range commits {
+		if c.CreatedAt > lastActivity {
+			lastActivity = c.CreatedAt
+		}
 	}
 
 	return &WorkspaceStatus{
@@ -1568,9 +1739,130 @@ func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName 
 		Branches:     branches,
 		Decisions:    decisions,
 		Notes:        notes,
-		ItemCount:    totalItems,
+		Commits:      commits,
+		ItemCount:    totalItems + len(commits),
 		LastActivity: lastActivity,
 	}, nil
+}
+
+// ── Plugin CRUD ───────────────────────────────────────────────────
+
+// InstallPlugin registers a plugin in the database. The manifest JSON is
+// stored so future migrations or compatibility checks can inspect it.
+func (ks *KnowledgeStore) InstallPlugin(ctx context.Context, name, version, description, path, manifestJSON string) (*Plugin, error) {
+	now := nowMS()
+	id := newULID()
+
+	p := &Plugin{
+		ID:           id,
+		Name:         name,
+		Version:      version,
+		Description:  description,
+		Path:         path,
+		Enabled:      true,
+		ManifestJSON: manifestJSON,
+		InstalledAt:  now,
+	}
+
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT INTO plugins (id, name, version, description, path, enabled, manifest_json, installed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.Name, p.Version, p.Description, p.Path, boolToInt(p.Enabled), p.ManifestJSON, p.InstalledAt)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return nil, ErrDuplicatePlugin
+		}
+		return nil, fmt.Errorf("install plugin: %w", err)
+	}
+
+	return p, nil
+}
+
+// GetPlugin retrieves a plugin by name.
+func (ks *KnowledgeStore) GetPlugin(ctx context.Context, name string) (*Plugin, error) {
+	p := &Plugin{}
+	var enabled int
+	err := ks.db.QueryRowContext(ctx, `
+		SELECT id, name, version, COALESCE(description, ''), path, enabled, manifest_json, installed_at
+		FROM plugins WHERE name = ?`, name,
+	).Scan(&p.ID, &p.Name, &p.Version, &p.Description, &p.Path, &enabled, &p.ManifestJSON, &p.InstalledAt)
+	if err == sql.ErrNoRows {
+		return nil, ErrPluginNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get plugin: %w", err)
+	}
+	p.Enabled = enabled == 1
+	_ = json.Unmarshal([]byte(p.ManifestJSON), &p.Manifest)
+	return p, nil
+}
+
+// ListPlugins returns all installed plugins, ordered by name.
+func (ks *KnowledgeStore) ListPlugins(ctx context.Context) ([]Plugin, error) {
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, name, version, COALESCE(description, ''), path, enabled, manifest_json, installed_at
+		FROM plugins ORDER BY name ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list plugins: %w", err)
+	}
+	defer rows.Close()
+
+	return scanPlugins(rows)
+}
+
+// RemovePlugin uninstalls a plugin from the database.
+func (ks *KnowledgeStore) RemovePlugin(ctx context.Context, name string) error {
+	result, err := ks.db.ExecContext(ctx, `DELETE FROM plugins WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("remove plugin: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrPluginNotFound
+	}
+	return nil
+}
+
+// EnablePlugin sets a plugin's enabled flag to 1.
+func (ks *KnowledgeStore) EnablePlugin(ctx context.Context, name string) error {
+	result, err := ks.db.ExecContext(ctx, `UPDATE plugins SET enabled = 1 WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("enable plugin: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrPluginNotFound
+	}
+	return nil
+}
+
+// DisablePlugin sets a plugin's enabled flag to 0.
+func (ks *KnowledgeStore) DisablePlugin(ctx context.Context, name string) error {
+	result, err := ks.db.ExecContext(ctx, `UPDATE plugins SET enabled = 0 WHERE name = ?`, name)
+	if err != nil {
+		return fmt.Errorf("disable plugin: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrPluginNotFound
+	}
+	return nil
+}
+
+// scanPlugins scans plugin rows into a slice.
+func scanPlugins(rows *sql.Rows) ([]Plugin, error) {
+	var plugins []Plugin
+	for rows.Next() {
+		var p Plugin
+		var enabled int
+		if err := rows.Scan(&p.ID, &p.Name, &p.Version, &p.Description, &p.Path, &enabled, &p.ManifestJSON, &p.InstalledAt); err != nil {
+			return nil, fmt.Errorf("scan plugin: %w", err)
+		}
+		p.Enabled = enabled == 1
+		_ = json.Unmarshal([]byte(p.ManifestJSON), &p.Manifest)
+		plugins = append(plugins, p)
+	}
+	return plugins, rows.Err()
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────
@@ -1664,7 +1956,7 @@ func scanWorkspaces(rows *sql.Rows) ([]Workspace, error) {
 		var w Workspace
 		var tagsJSON string
 		if err := rows.Scan(
-			&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt,
+			&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt, &w.LastCommitSHA,
 		); err != nil {
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
@@ -1702,10 +1994,31 @@ func scanWorkspaceBranches(rows *sql.Rows) ([]WorkspaceBranch, error) {
 	return branches, rows.Err()
 }
 
+// scanWorkspaceCommits scans workspace_commit rows into a slice.
+func scanWorkspaceCommits(rows *sql.Rows) ([]WorkspaceCommit, error) {
+	var commits []WorkspaceCommit
+	for rows.Next() {
+		var c WorkspaceCommit
+		if err := rows.Scan(&c.ID, &c.WorkspaceID, &c.CommitSHA, &c.BranchName, &c.Message, &c.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan workspace commit: %w", err)
+		}
+		commits = append(commits, c)
+	}
+	return commits, rows.Err()
+}
+
 // coalesceStr returns the dereferenced string or "" if the pointer is nil.
 func coalesceStr(s *string) string {
 	if s == nil {
 		return ""
 	}
 	return *s
+}
+
+// boolToInt converts a bool to an int (0/1) for SQLite storage.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }

@@ -170,20 +170,45 @@ struct that handles decisions, notes, onboarding, and search.
 
 ---
 
-## Future Git Integration
+## Git Integration (v0.5)
 
-Once the Git adapter is built (v0.1 scope), workspace integration will add:
+Workspaces are now wired to real Git state through the following:
 
-1. **`got workspace status` with Git data** — show whether tracked files
-   have uncommitted changes, whether tracked branches exist, and whether
-   they're ahead/behind.
-2. **`got workspace diff`** — show changes across all tracked files.
-3. **`got workspace sync`** — ensure all tracked branches exist.
-4. **`got workspace summary`** — Git-aware activity report.
+### Git Validation
+- **`got workspace add-file`** validates the file exists on disk or in the
+  Git working tree. Use `--no-validate` to skip.
+- **`got workspace add-branch`** validates the branch exists in the
+  repository. Use `--no-validate` to skip.
 
-The current string-reference design makes this straightforward: the Git
-adapter just needs to resolve `workspace_files.path` against the repo
-and `workspace_branches.branch_name` against `git branch --list`.
+### Live Git Information
+- **`got workspace show`** resolves tracked branches: displays whether
+  each branch exists, clean/dirty status (for the current branch),
+  ahead/behind counts, and latest commit message.
+- **`got workspace list`** shows the last commit SHA for each workspace.
+- **`got workspace status`** shows the current Git branch and clean/dirty
+  status alongside workspace item counts.
+
+### Sync Command
+- **`got workspace sync <name>`** compares tracked files/branches against
+  the repository state. Detects stale files (removed from disk) and stale
+  branches (deleted from Git) and optionally removes them from the
+  workspace (unless `--no-cleanup` is set).
+
+### Event-Driven Updates
+
+When `CommitCreated` events fire (via `internal/cli/integration.go`),
+the IntegrationService automatically checks all workspaces for branches
+matching the commit's branch. If found, the commit is recorded in
+`workspace_commits` and `last_commit_sha` is updated on the workspace.
+
+### Data Model Additions
+
+Migration `0006_integration.sql` adds:
+- `workspace_commits` table: links workspace_id → commit_sha with
+  branch name, commit message, and link timestamp.
+- `last_commit_sha` column on `workspaces` for fast access.
+
+All integration is fully offline-only and testable with real Git repos.
 
 ---
 

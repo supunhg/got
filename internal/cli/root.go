@@ -5,12 +5,30 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
 
+	"github.com/got-sh/got/internal/events"
+	"github.com/got-sh/got/internal/store"
 	"github.com/got-sh/got/internal/version"
+)
+
+// Global shared bus and plugin runtime for event-driven plugins.
+//
+// The bus is created once and shared across all CLI commands so that
+// plugin hook subscribers can receive events published by any command.
+// The plugin runtime is loaded on startup (unless --no-plugins) and
+// stored here for reuse (e.g., by `got plugin run`).
+var (
+	globalBus             *events.Bus
+	globalPluginRuntime   *PluginRuntime
+	globalPluginRuntimeMu sync.Once
 )
 
 // NewRootCmd builds the root `got` command with all persistent flags and
@@ -44,6 +62,34 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	pf.Bool("no-tui", false, "force plain CLI output even in wizards (CI-friendly)")
 	pf.String("log-level", "warn", "log level: debug|info|warn|error")
 	pf.Duration("plugin-timeout", 30*time.Second, "plugin invocation timeout")
+	pf.Bool("no-plugins", false, "skip loading plugins on startup")
+
+	// PersistentPreRunE runs before every command. We use it to lazily
+	// create the shared event bus and load plugins once on the first
+	// command invocation, unless --no-plugins is set.
+	cmd.PersistentPreRunE = func(cmd *cobra.Command, args []string) error {
+		// Only load once.
+		var loadErr error
+		globalPluginRuntimeMu.Do(func() {
+			// Create the shared bus once.
+			globalBus = events.New()
+
+			noPlugins, _ := cmd.Flags().GetBool("no-plugins")
+			if noPlugins {
+				return
+			}
+
+			// Try to find .got/ — if not initialized yet, skip silently
+			// (the user might be running `got init` or `got version`).
+			runtime, err := loadPlugins(globalBus)
+			if err != nil {
+				loadErr = err
+				return
+			}
+			globalPluginRuntime = runtime
+		})
+		return loadErr
+	}
 
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newVersionCmd())
@@ -52,6 +98,7 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 	cmd.AddCommand(newOnboardCmd())
 	cmd.AddCommand(newSearchCmd())
 	cmd.AddCommand(newWorkspaceCmd())
+	cmd.AddCommand(newPluginCmd())
 	cmd.AddCommand(newStatusCmd())
 	cmd.AddCommand(newCommitCmd())
 	cmd.AddCommand(newBranchCmd())
@@ -68,6 +115,40 @@ Git remains the source of truth; GOT metadata lives in .got/.`,
 func Execute() error {
 	return NewRootCmd().Execute()
 }
+
+// loadPlugins opens the GOT store and loads all enabled plugins onto
+// the given bus. Returns nil, nil if GOT is not initialized.
+func loadPlugins(bus *events.Bus) (*PluginRuntime, error) {
+	gotDir, err := findGotDir()
+	if err != nil {
+		return nil, nil
+	}
+
+	dbPath := filepath.Join(gotDir, "got.db")
+	if _, err := os.Stat(dbPath); err != nil {
+		return nil, nil
+	}
+
+	s, err := store.Open(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open store for plugins: %w", err)
+	}
+
+	// Use the shared bus for the runtime's store too, so events published
+	// by plugin operations go through the same bus.
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+	pluginsDir := filepath.Join(gotDir, PluginDirName)
+
+	rt := NewPluginRuntime(ks, bus, pluginsDir)
+	if err := rt.Load(bgContext); err != nil {
+		_, _ = fmt.Fprintf(os.Stderr, "warning: plugin load: %v\n", err)
+	}
+
+	return rt, nil
+}
+
+// bgContext returns a background context for plugin loading.
+var bgContext = context.Background()
 
 // newVersionCmd returns the `got version` subcommand. It prints the same
 // string as `--version` so scripts can capture either form.

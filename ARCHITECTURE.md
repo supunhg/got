@@ -252,6 +252,35 @@ Future capabilities:
 
 # Development Roadmap
 
+## Integration Layer
+
+The Integration Layer (`internal/cli/integration.go`) ties the Git Adapter,
+Workspace Engine, Knowledge Engine, and Event Bus together through
+event-driven automatic actions.
+
+### Event-driven flows
+
+* `CommitCreated` → auto-update workspace `last_commit_sha` and
+  `workspace_commits` for any workspace tracking the commit's branch
+* `got commit --auto-link` → link unlinked decisions/notes to new commit
+* `got decision link --auto` → resolve HEAD and link to most recent commit
+
+### Git-aware workspaces
+
+* `got workspace add-file` validates file exists (on disk or Git tree)
+* `got workspace add-branch` validates branch exists in Git
+* `got workspace show` resolves live branch info (exists, ahead/behind,
+  latest commit)
+* `got workspace sync` detects stale files/branches and cleans up
+* `got workspace create --create-branch` creates a Git branch
+
+### Data model (migration 0006)
+
+* `workspace_commits` table linking workspace_id → commit_sha
+* `last_commit_sha` column on workspaces for fast access
+
+See `ARCHITECTURE_INTEGRATION.md` for full details.
+
 ## v0.1
 
 * Git adapter
@@ -278,6 +307,13 @@ Future capabilities:
 * Workspaces
 * Knowledge engine
 * ADR support
+
+## v0.5
+
+* Git adapter + core Git commands
+* Workspace ↔ Git integration
+* Event-driven integration layer
+* Decision auto-link and commit linking
 
 ## v1.0
 

@@ -1647,6 +1647,175 @@ func TestGetWorkspaceStatusNotFound(t *testing.T) {
 	}
 }
 
+// ── Workspace commits tests ──────────────────────────────────────
+
+func TestAddWorkspaceCommit(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	c, err := ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "abc123def456abc123def456abc123def456abc1",
+		BranchName:    "main",
+		Message:       "feat: implement OAuth",
+	})
+	if err != nil {
+		t.Fatalf("AddWorkspaceCommit: %v", err)
+	}
+
+	if c.CommitSHA != "abc123def456abc123def456abc123def456abc1" {
+		t.Fatalf("commit SHA mismatch: %q", c.CommitSHA)
+	}
+	if c.BranchName != "main" {
+		t.Fatalf("branch name mismatch: %q", c.BranchName)
+	}
+	if c.Message != "feat: implement OAuth" {
+		t.Fatalf("message mismatch: %q", c.Message)
+	}
+
+	// Verify last_commit_sha was updated.
+	w, _ := ks.GetWorkspace(ctx, "ws")
+	if w.LastCommitSHA != "abc123def456abc123def456abc123def456abc1" {
+		t.Fatalf("expected last_commit_sha to be set, got %q", w.LastCommitSHA)
+	}
+
+	// Verify duplicate is ignored (UNIQUE constraint).
+	_, err = ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "abc123def456abc123def456abc123def456abc1",
+		BranchName:    "main",
+		Message:       "duplicate",
+	})
+	if err != nil {
+		t.Fatalf("AddWorkspaceCommit duplicate: %v", err)
+	}
+}
+
+func TestListWorkspaceCommits(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "aaa",
+		BranchName:    "main",
+		Message:       "first",
+	})
+	ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "bbb",
+		BranchName:    "main",
+		Message:       "second",
+	})
+
+	commits, err := ks.ListWorkspaceCommits(ctx, "ws", 10)
+	if err != nil {
+		t.Fatalf("ListWorkspaceCommits: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("expected 2 commits, got %d", len(commits))
+	}
+	// Most recent first.
+	if commits[0].CommitSHA != "bbb" {
+		t.Fatalf("expected most recent 'bbb' first, got %q", commits[0].CommitSHA)
+	}
+}
+
+func TestAddWorkspaceCommitNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "nonexistent",
+		CommitSHA:     "abc",
+	})
+	if err != ErrWorkspaceNotFound {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
+	}
+}
+
+func TestUpdateNoteCommitHash(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	n, _ := ks.CreateNote(ctx, CreateNoteParams{
+		Message: "Test note",
+	})
+
+	// Update the commit hash.
+	err := ks.UpdateNoteCommitHash(ctx, n.ID, "abc123def456")
+	if err != nil {
+		t.Fatalf("UpdateNoteCommitHash: %v", err)
+	}
+
+	// Verify the commit hash was set (note.id unchanged).
+	nReloaded, _ := ks.GetNote(ctx, n.ID)
+	if nReloaded.ID != n.ID {
+		t.Fatalf("note ID changed: %q vs %q", nReloaded.ID, n.ID)
+	}
+	if nReloaded.CommitHash != "abc123def456" {
+		t.Fatalf("expected commit_hash 'abc123def456', got %q", nReloaded.CommitHash)
+	}
+}
+
+func TestUpdateNoteCommitHashNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	err := ks.UpdateNoteCommitHash(ctx, "nonexistent", "abc123")
+	if err != ErrNoteNotFound {
+		t.Fatalf("expected ErrNoteNotFound, got %v", err)
+	}
+}
+
+func TestWorkspaceStatusWithCommits(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+	ks.AddWorkspaceBranch(ctx, "ws", "main")
+
+	// Add two commits.
+	ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "aaa",
+		BranchName:    "main",
+		Message:       "commit one",
+	})
+	ks.AddWorkspaceCommit(ctx, AddWorkspaceCommitParams{
+		WorkspaceName: "ws",
+		CommitSHA:     "bbb",
+		BranchName:    "main",
+		Message:       "commit two",
+	})
+
+	status, err := ks.GetWorkspaceStatus(ctx, "ws")
+	if err != nil {
+		t.Fatalf("GetWorkspaceStatus: %v", err)
+	}
+
+	if len(status.Commits) != 2 {
+		t.Fatalf("expected 2 commits in status, got %d", len(status.Commits))
+	}
+	// Item count should include commits (1 branch + 2 commits = 3).
+	if status.ItemCount != 3 {
+		t.Fatalf("expected item count 3 (1 branch + 2 commits), got %d", status.ItemCount)
+	}
+	if status.Workspace.LastCommitSHA != "bbb" {
+		t.Fatalf("expected last_commit_sha 'bbb', got %q", status.Workspace.LastCommitSHA)
+	}
+}
+
 func TestULIDGeneration(t *testing.T) {
 	// Verify ULIDs are unique and sortable.
 	ids := make(map[string]bool)

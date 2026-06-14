@@ -177,14 +177,17 @@ The adapter is fully testable with temporary Git repositories:
 
 ## Future Integration
 
-### Workspace Integration
+### Workspace Integration (v0.5)
 
-Once the Git adapter is stable, workspace files and branches can be validated against real Git state:
+The Git adapter now powers real workspace ↔ Git validation:
 
-- `got workspace add-file` — can check that the path exists in the working tree or is tracked
-- `got workspace add-branch` — can verify the branch exists via `ListBranches()`
-- `got workspace status` — can show real Git status (staged/unstaged changes) alongside workspace items
-- After `got commit`, auto-scan workspace links and update timestamps
+- **`got workspace add-file`** — validates the path exists on disk or in the Git working tree via `GetStatus()`
+- **`got workspace add-branch`** — validates the branch exists via `ListBranches()`
+- **`got workspace show`** — resolves branch info (exists, clean/dirty, ahead/behind, latest commit) by calling `ListBranches()`, `GetStatus()`, and `rev-list --left-right --count`
+- **`got workspace status`** — shows current Git branch and clean/dirty status using `CurrentBranch()` and `GetStatus()`
+- **`got workspace sync`** — compares tracked files/branches against real Git state, detects stale items
+- **`got commit --auto-link`** — after creating a commit, auto-links unlinked decisions/notes and updates workspace activity via `AddWorkspaceCommit()`
+- **Event-driven updates** — the `IntegrationService` subscribes to `CommitCreated` events and automatically records commits in workspaces tracking that branch
 
 ### GitHub / Remote Integration
 

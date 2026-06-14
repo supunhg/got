@@ -15,6 +15,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/got-sh/got/internal/events"
+	"github.com/got-sh/got/internal/git"
 	"github.com/got-sh/got/internal/store"
 )
 
@@ -460,25 +461,32 @@ func showDecisionTerminal(cmd *cobra.Command, d *store.Decision, links []store.D
 // ── Decision link ───────────────────────────────────────────────────
 
 func newDecisionLinkCmd() *cobra.Command {
-	var commitSHA, filePath, workspace string
+	var commitSHA, filePath, workspace, branchFlag string
 	var lineStart, lineEnd int
-	var branch string
+	var autoLink, branchLink bool
 
 	cmd := &cobra.Command{
 		Use:   "link <id>",
 		Short: "Link a decision to commits, files, or workspaces",
 		Long: `Attach a link (commit, file, or workspace) to a decision.
 
-At least one of --commit, --file, or --workspace must be provided.
+At least one of --commit, --file, --workspace, --branch, or --auto must be provided.
+
+--auto links to the most recent commit on the current branch.
+--branch links to all commits on the specified branch.
 
 Examples:
   got decision link 01JQZ3ZABC --commit HEAD
   got decision link 01JQZ3ZABC --file src/main.go --line-start 42 --line-end 58
   got decision link 01JQZ3ZABC --file src/main.go --branch feature/x
-  got decision link 01JQZ3ZABC --workspace engine`,
+  got decision link 01JQZ3ZABC --workspace engine
+  got decision link 01JQZ3ZABC --auto
+  got decision link 01JQZ3ZABC --branch feat/oauth
+  got decision link 01JQZ3ZABC --branch feat/oauth --commit abc123`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDecisionLink(cmd, args[0], commitSHA, filePath, workspace, branch, lineStart, lineEnd)
+			return runDecisionLink(cmd, args[0], commitSHA, filePath, workspace, branchFlag,
+				lineStart, lineEnd, autoLink, branchLink)
 		},
 	}
 
@@ -486,19 +494,49 @@ Examples:
 	flags.StringVar(&commitSHA, "commit", "", "Link to a commit SHA or ref")
 	flags.StringVar(&filePath, "file", "", "Link to a file path")
 	flags.StringVar(&workspace, "workspace", "", "Link to a workspace")
-	flags.StringVar(&branch, "branch", "", "Branch context for the link")
+	flags.StringVar(&branchFlag, "branch", "", "Branch context for the link, or link to all commits on branch")
 	flags.IntVar(&lineStart, "line-start", 0, "Start line (file links only)")
 	flags.IntVar(&lineEnd, "line-end", 0, "End line (file links only)")
+	flags.BoolVar(&autoLink, "auto", false, "Link to the most recent commit on the current branch")
+	flags.BoolVar(&branchLink, "branch-link", false, "Link to all commits on a branch (use with --branch)")
 
 	return cmd
 }
 
-func runDecisionLink(cmd *cobra.Command, decisionID, commitSHA, filePath, workspace, branch string, lineStart, lineEnd int) error {
+func runDecisionLink(cmd *cobra.Command, decisionID, commitSHA, filePath, workspace, branchFlag string,
+	lineStart, lineEnd int, autoLink, branchLink bool) error {
 	ctx := context.Background()
 
 	// ── Determine link type and target ───────────────────────────
 	var linkType, target string
 	commitCount := 0
+
+	// Handle --auto: resolve current branch HEAD.
+	if autoLink {
+		repoPath, repoErr := findRepoRoot()
+		if repoErr != nil {
+			return fmt.Errorf("--auto: not in a Git repository: %w", repoErr)
+		}
+		adapter := git.NewExecAdapter(nil)
+		if err := adapter.OpenRepository(ctx, repoPath); err != nil {
+			return fmt.Errorf("--auto: open repo: %w", err)
+		}
+		sha, _, err := adapter.Run(ctx, "rev-parse", "HEAD")
+		if err != nil {
+			return fmt.Errorf("--auto: resolve HEAD: %w", err)
+		}
+		commitSHA = sha
+	}
+
+	// Handle --branch-link: if --branch is set and --commit is not, link to the branch.
+	// The actual commit linking happens per-commit below.
+	if branchLink && branchFlag != "" && commitSHA == "" {
+		// Just link to the branch itself.
+		linkType = "branch"
+		target = branchFlag
+		commitCount++
+	}
+
 	if commitSHA != "" {
 		linkType = "commit"
 		target = commitSHA
@@ -514,12 +552,16 @@ func runDecisionLink(cmd *cobra.Command, decisionID, commitSHA, filePath, worksp
 		target = workspace
 		commitCount++
 	}
+	// If only --branch is provided (no --branch-link), it's just context for another link.
+	if commitCount == 0 && branchFlag != "" && !branchLink {
+		return fmt.Errorf("link decision: --branch alone only provides context; use with --commit, --file, --workspace, or --branch-link")
+	}
 
-	if commitCount == 0 {
-		return fmt.Errorf("link decision: specify one of --commit, --file, or --workspace")
+	if commitCount == 0 && !branchLink {
+		return fmt.Errorf("link decision: specify one of --commit, --file, --workspace, --auto, or --branch --branch-link")
 	}
 	if commitCount > 1 {
-		return fmt.Errorf("link decision: specify only one of --commit, --file, or --workspace")
+		return fmt.Errorf("link decision: specify only one of --commit, --file, --workspace, or --branch --branch-link")
 	}
 
 	// ── Map line numbers to pointers (0 means unset) ─────────────
@@ -546,7 +588,7 @@ func runDecisionLink(cmd *cobra.Command, decisionID, commitSHA, filePath, worksp
 		Target:     target,
 		LineStart:  ls,
 		LineEnd:    le,
-		Branch:     branch,
+		Branch:     branchFlag,
 	}); err != nil {
 		return fmt.Errorf("link decision: %w", err)
 	}
@@ -890,15 +932,19 @@ func promptMultiline(reader *bufio.Reader, label string) (string, error) {
 // the KnowledgeStore and EventLogger, and returns a closer. The caller
 // must call Close on the returned closer when done.
 type knowledgeStoreCloser struct {
-	ks  *store.KnowledgeStore
-	st  *store.Store
-	bus *events.Bus
-	el  *store.EventLogger
+	ks    *store.KnowledgeStore
+	st    *store.Store
+	bus   *events.Bus
+	el    *store.EventLogger
+	owned bool // true if this closer owns the bus (should close it)
 }
 
 func (c *knowledgeStoreCloser) Close() {
 	c.el.Close()
-	c.bus.Close()
+	// Only close the bus if we own it (not the shared globalBus).
+	if c.owned {
+		c.bus.Close()
+	}
 	c.st.Close()
 }
 
@@ -918,11 +964,20 @@ func openKnowledgeStore() (*knowledgeStoreCloser, error) {
 		return nil, fmt.Errorf("open store: %w", err)
 	}
 
-	bus := events.New()
+	// Use the shared global bus if it exists (loaded by PersistentPreRunE),
+	// otherwise create a new one. The shared bus ensures plugin hooks
+	// receive events published by this command.
+	bus := globalBus
+	owned := false
+	if bus == nil {
+		bus = events.New()
+		owned = true
+	}
+
 	ks := store.NewKnowledgeStore(s.DB(), bus)
 	el := store.NewEventLogger(s.DB(), bus)
 
-	return &knowledgeStoreCloser{ks: ks, st: s, bus: bus, el: el}, nil
+	return &knowledgeStoreCloser{ks: ks, st: s, bus: bus, el: el, owned: owned}, nil
 }
 
 // ── Repository discovery ────────────────────────────────────────────
