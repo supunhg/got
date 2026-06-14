@@ -18,3 +18,6 @@ coverage.html
 # OS
 .DS_Store
 Thumbs.db
+
+# Temp / scratch
+TEMP.md

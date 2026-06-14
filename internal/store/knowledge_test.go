@@ -413,6 +413,62 @@ func TestListNotes(t *testing.T) {
 	}
 }
 
+func TestDeleteNote(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	n, err := ks.CreateNote(ctx, CreateNoteParams{
+		Message:    "To be deleted",
+		Branch:     "feature/x",
+		CommitHash: "abc123",
+	})
+	if err != nil {
+		t.Fatalf("CreateNote: %v", err)
+	}
+
+	// Subscribe to NoteDeleted.
+	var deletedEvent events.NoteDeletedPayload
+	_, _ = bus.Subscribe(events.EventNoteDeleted, func(_ context.Context, e events.Event) error {
+		deletedEvent = e.Payload.(events.NoteDeletedPayload)
+		return nil
+	})
+
+	// Delete the note.
+	err = ks.DeleteNote(ctx, n.ID)
+	if err != nil {
+		t.Fatalf("DeleteNote: %v", err)
+	}
+
+	// Verify it's gone.
+	_, err = ks.GetNote(ctx, n.ID)
+	if err != ErrNoteNotFound {
+		t.Fatalf("expected ErrNoteNotFound after delete, got %v", err)
+	}
+
+	// Verify event.
+	if deletedEvent.ID != n.ID {
+		t.Fatalf("event ID mismatch: %q vs %q", deletedEvent.ID, n.ID)
+	}
+	if deletedEvent.Message != "To be deleted" {
+		t.Fatalf("event message mismatch: %q", deletedEvent.Message)
+	}
+	if deletedEvent.Branch != "feature/x" {
+		t.Fatalf("event branch mismatch: %q", deletedEvent.Branch)
+	}
+}
+
+func TestDeleteNoteNonexistent(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	err := ks.DeleteNote(ctx, "nonexistent")
+	if err != ErrNoteNotFound {
+		t.Fatalf("expected ErrNoteNotFound, got %v", err)
+	}
+}
+
 func TestListNotesDefaultLimit(t *testing.T) {
 	ks, _, cleanup := newTestStore(t)
 	defer cleanup()
@@ -641,6 +697,367 @@ func TestCompleteOnboarding(t *testing.T) {
 	}
 }
 
+// ── Search tests ───────────────────────────────────────────────────
+
+func TestSearchDecisionsAndNotes(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	// Create decisions with searchable content.
+	ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:    "Use SQLite for storage",
+		Context:  "We need a local database for persistence",
+		Decision: "Use SQLite with the modernc.org driver",
+	})
+	ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:    "Adopt Bubbletea for TUI",
+		Context:  "We need a terminal UI framework",
+		Decision: "Use Bubbletea for the interactive CLI",
+		Alternatives: "Considered Huh? and survey",
+	})
+
+	// Create notes with searchable content.
+	ks.CreateNote(ctx, CreateNoteParams{
+		Message: "SQLite WAL mode improves concurrent read performance",
+	})
+	ks.CreateNote(ctx, CreateNoteParams{
+		Message: "Bubbletea has excellent testing utilities in the form of the TestModel",
+	})
+
+	// Search for SQLite.
+	results, err := ks.Search(ctx, SearchParams{Query: "SQLite", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search('SQLite'): %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results for 'SQLite', got %d", len(results))
+	}
+
+	// First result should be the decision (matches more fields = higher score).
+	if results[0].Type != "decision" {
+		t.Fatalf("expected first result type 'decision', got %q", results[0].Type)
+	}
+	if results[0].Title != "Use SQLite for storage" {
+		t.Fatalf("expected title 'Use SQLite for storage', got %q", results[0].Title)
+	}
+	if results[0].Status != "proposed" {
+		t.Fatalf("expected status 'proposed', got %q", results[0].Status)
+	}
+
+	// Second result should be the note.
+	if results[1].Type != "note" {
+		t.Fatalf("expected second result type 'note', got %q", results[1].Type)
+	}
+
+	// Search for Bubbletea.
+	results, err = ks.Search(ctx, SearchParams{Query: "Bubbletea", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search('Bubbletea'): %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results for 'Bubbletea', got %d", len(results))
+	}
+}
+
+func TestSearchFilterByType(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateDecision(ctx, CreateDecisionParams{Title: "Database choice"})
+	ks.CreateNote(ctx, CreateNoteParams{Message: "Database tuning notes"})
+
+	// Search only decisions.
+	decOnly := "decision"
+	results, err := ks.Search(ctx, SearchParams{Query: "Database", Type: &decOnly, Limit: 10})
+	if err != nil {
+		t.Fatalf("Search decisions only: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 decision result, got %d", len(results))
+	}
+	if results[0].Type != "decision" {
+		t.Fatalf("expected type 'decision', got %q", results[0].Type)
+	}
+
+	// Search only notes.
+	noteOnly := "note"
+	results, err = ks.Search(ctx, SearchParams{Query: "Database", Type: &noteOnly, Limit: 10})
+	if err != nil {
+		t.Fatalf("Search notes only: %v", err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("expected 1 note result, got %d", len(results))
+	}
+	if results[0].Type != "note" {
+		t.Fatalf("expected type 'note', got %q", results[0].Type)
+	}
+}
+
+func TestSearchEmptyQuery(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	results, err := ks.Search(ctx, SearchParams{Query: ""})
+	if err != nil {
+		t.Fatalf("Search empty: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results for empty query, got %d", len(results))
+	}
+}
+
+func TestSearchWithWorkspaceFilter(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	wid := ptrString("ws1")
+	ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:       "SQLite in workspace",
+		Decision:    "Use SQLite",
+		WorkspaceID: wid,
+	})
+	ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:    "SQLite elsewhere",
+		Decision: "Use SQLite too",
+	})
+	ks.CreateNote(ctx, CreateNoteParams{
+		Message:     "SQLite note in workspace",
+		WorkspaceID: wid,
+	})
+
+	// Search with workspace filter.
+	results, err := ks.Search(ctx, SearchParams{Query: "SQLite", WorkspaceID: wid, Limit: 10})
+	if err != nil {
+		t.Fatalf("Search with workspace filter: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results in workspace, got %d", len(results))
+	}
+	for _, r := range results {
+		if r.WorkspaceID == nil || *r.WorkspaceID != "ws1" {
+			t.Fatalf("expected result in workspace 'ws1', got %v", r.WorkspaceID)
+		}
+	}
+}
+
+func TestSearchNoMatches(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	results, err := ks.Search(ctx, SearchParams{Query: "zzz_nonexistent_zzz", Limit: 10})
+	if err != nil {
+		t.Fatalf("Search no match: %v", err)
+	}
+	if len(results) != 0 {
+		t.Fatalf("expected 0 results, got %d", len(results))
+	}
+}
+
+// ── UpdateDecision tests ────────────────────────────────────────────
+
+func TestUpdateDecision(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	d, err := ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:    "Original title",
+		Context:  "Original context",
+		Decision: "Original decision",
+	})
+	if err != nil {
+		t.Fatalf("CreateDecision: %v", err)
+	}
+
+	// Subscribe to DecisionUpdated.
+	var updatedEvent events.DecisionUpdatedPayload
+	_, _ = bus.Subscribe(events.EventDecisionUpdated, func(_ context.Context, e events.Event) error {
+		updatedEvent = e.Payload.(events.DecisionUpdatedPayload)
+		return nil
+	})
+
+	// Update context and decision.
+	updated, err := ks.UpdateDecision(ctx, d.ID, UpdateDecisionParams{
+		Context:  ptrString("Updated context"),
+		Decision: ptrString("Updated decision"),
+	})
+	if err != nil {
+		t.Fatalf("UpdateDecision: %v", err)
+	}
+
+	if updated.Title != "Original title" {
+		t.Fatalf("expected title unchanged, got %q", updated.Title)
+	}
+	if updated.Context != "Updated context" {
+		t.Fatalf("expected context 'Updated context', got %q", updated.Context)
+	}
+	if updated.Decision != "Updated decision" {
+		t.Fatalf("expected decision 'Updated decision', got %q", updated.Decision)
+	}
+
+	// Verify event.
+	if updatedEvent.ID != d.ID {
+		t.Fatalf("event ID mismatch: %q", updatedEvent.ID)
+	}
+	if updatedEvent.Title != "Original title" {
+		t.Fatalf("expected event title 'Original title', got %q", updatedEvent.Title)
+	}
+	if updatedEvent.Status != "proposed" {
+		t.Fatalf("expected event status 'proposed', got %q", updatedEvent.Status)
+	}
+	if updatedEvent.PreviousStatus != "proposed" {
+		t.Fatalf("expected previous_status 'proposed', got %q", updatedEvent.PreviousStatus)
+	}
+}
+
+func TestUpdateDecisionNonexistent(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.UpdateDecision(ctx, "nonexistent", UpdateDecisionParams{
+		Context: ptrString("anything"),
+	})
+	if err != ErrDecisionNotFound {
+		t.Fatalf("expected ErrDecisionNotFound, got %v", err)
+	}
+}
+
+func TestUpdateDecisionNoChanges(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	d, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "Stable"})
+
+	// Call with no fields set — should return current without error.
+	result, err := ks.UpdateDecision(ctx, d.ID, UpdateDecisionParams{})
+	if err != nil {
+		t.Fatalf("UpdateDecision with no changes: %v", err)
+	}
+	if result.ID != d.ID {
+		t.Fatalf("expected same decision, got %q", result.ID)
+	}
+}
+
+func TestUpdateDecisionClearWorkspace(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	d, _ := ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:       "Workspace decision",
+		WorkspaceID: ptrString("ws1"),
+	})
+
+	// Clear workspace by setting it to empty string.
+	updated, err := ks.UpdateDecision(ctx, d.ID, UpdateDecisionParams{
+		WorkspaceID: ptrString(""),
+	})
+	if err != nil {
+		t.Fatalf("UpdateDecision clear workspace: %v", err)
+	}
+
+	if updated.WorkspaceID != nil && *updated.WorkspaceID != "" {
+		t.Fatalf("expected workspace to be nil/empty, got %v", *updated.WorkspaceID)
+	}
+}
+
+// ── DeleteDecision tests ──────────────────────────────────────────
+
+func TestDeleteDecision(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	d, err := ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:    "To be deleted",
+		Context:  "This decision will be removed",
+		Decision: "Delete it",
+	})
+	if err != nil {
+		t.Fatalf("CreateDecision: %v", err)
+	}
+
+	// Subscribe to DecisionDeleted.
+	var deletedEvent events.DecisionDeletedPayload
+	_, _ = bus.Subscribe(events.EventDecisionDeleted, func(_ context.Context, e events.Event) error {
+		deletedEvent = e.Payload.(events.DecisionDeletedPayload)
+		return nil
+	})
+
+	// Delete the decision.
+	err = ks.DeleteDecision(ctx, d.ID)
+	if err != nil {
+		t.Fatalf("DeleteDecision: %v", err)
+	}
+
+	// Verify it's gone.
+	_, err = ks.GetDecision(ctx, d.ID)
+	if err != ErrDecisionNotFound {
+		t.Fatalf("expected ErrDecisionNotFound after delete, got %v", err)
+	}
+
+	// Verify event.
+	if deletedEvent.ID != d.ID {
+		t.Fatalf("event ID mismatch: %q vs %q", deletedEvent.ID, d.ID)
+	}
+	if deletedEvent.Title != "To be deleted" {
+		t.Fatalf("event title mismatch: %q", deletedEvent.Title)
+	}
+	if deletedEvent.Status != "proposed" {
+		t.Fatalf("event status mismatch: %q", deletedEvent.Status)
+	}
+}
+
+func TestDeleteDecisionWithLinks(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	d, _ := ks.CreateDecision(ctx, CreateDecisionParams{Title: "Delete me"})
+
+	// Add a link.
+	_ = ks.LinkDecision(ctx, LinkDecisionParams{
+		DecisionID: d.ID,
+		LinkType:   "commit",
+		Target:     "abc123",
+	})
+
+	// Verify link exists.
+	links, _ := ks.GetDecisionLinks(ctx, d.ID)
+	if len(links) != 1 {
+		t.Fatalf("expected 1 link before delete, got %d", len(links))
+	}
+
+	// Delete the decision.
+	if err := ks.DeleteDecision(ctx, d.ID); err != nil {
+		t.Fatalf("DeleteDecision: %v", err)
+	}
+
+	// Verify links are cascade-deleted.
+	links, _ = ks.GetDecisionLinks(ctx, d.ID)
+	if len(links) != 0 {
+		t.Fatalf("expected 0 links after cascade delete, got %d", len(links))
+	}
+}
+
+func TestDeleteDecisionNonexistent(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	err := ks.DeleteDecision(ctx, "nonexistent")
+	if err != ErrDecisionNotFound {
+		t.Fatalf("expected ErrDecisionNotFound, got %v", err)
+	}
+}
+
 // ── Event bus integration (nil bus) ────────────────────────────────
 
 func TestKnowledgeStoreNilBus(t *testing.T) {
@@ -768,6 +1185,465 @@ func TestListDecisionsWithLimit(t *testing.T) {
 	}
 	if len(decisions) != 3 {
 		t.Fatalf("expected 3 decisions, got %d", len(decisions))
+	}
+}
+
+// ── Workspace CRUD tests ──────────────────────────────────────────
+
+func TestCreateWorkspace(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	var createdEvent events.WorkspaceCreatedPayload
+	_, _ = bus.Subscribe(events.EventWorkspaceCreated, func(_ context.Context, e events.Event) error {
+		createdEvent = e.Payload.(events.WorkspaceCreatedPayload)
+		return nil
+	})
+
+	w, err := ks.CreateWorkspace(ctx, CreateWorkspaceParams{
+		Name:        "oauth",
+		Description: "OAuth 2.0 authentication implementation",
+		Tags:        []string{"auth", "security"},
+	})
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+
+	if w.Name != "oauth" {
+		t.Fatalf("expected name 'oauth', got %q", w.Name)
+	}
+	if w.Description != "OAuth 2.0 authentication implementation" {
+		t.Fatalf("description mismatch: %q", w.Description)
+	}
+	if w.Status != "active" {
+		t.Fatalf("expected status 'active', got %q", w.Status)
+	}
+	if len(w.Tags) != 2 || w.Tags[0] != "auth" {
+		t.Fatalf("unexpected tags: %v", w.Tags)
+	}
+
+	// Verify event.
+	if createdEvent.ID != w.ID {
+		t.Fatalf("event ID mismatch: %q vs %q", createdEvent.ID, w.ID)
+	}
+	if createdEvent.Name != "oauth" {
+		t.Fatalf("event name mismatch: %q", createdEvent.Name)
+	}
+}
+
+func TestCreateWorkspaceDuplicate(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "dupe"})
+	if err != nil {
+		t.Fatalf("first CreateWorkspace: %v", err)
+	}
+
+	_, err = ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "dupe"})
+	if err != ErrDuplicateWorkspace {
+		t.Fatalf("expected ErrDuplicateWorkspace, got %v", err)
+	}
+}
+
+func TestCreateWorkspaceEmptyName(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: ""})
+	if err == nil {
+		t.Fatal("expected error for empty workspace name")
+	}
+}
+
+func TestGetWorkspace(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	created, err := ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "test-ws"})
+	if err != nil {
+		t.Fatalf("CreateWorkspace: %v", err)
+	}
+
+	fetched, err := ks.GetWorkspace(ctx, "test-ws")
+	if err != nil {
+		t.Fatalf("GetWorkspace: %v", err)
+	}
+	if fetched.ID != created.ID {
+		t.Fatalf("ID mismatch: %q vs %q", fetched.ID, created.ID)
+	}
+	if fetched.Name != "test-ws" {
+		t.Fatalf("name mismatch: %q", fetched.Name)
+	}
+}
+
+func TestGetWorkspaceNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.GetWorkspace(ctx, "nonexistent")
+	if err != ErrWorkspaceNotFound {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
+	}
+}
+
+func TestListWorkspaces(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "b-ws"})
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "a-ws"})
+
+	workspaces, err := ks.ListWorkspaces(ctx)
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
+	}
+	if len(workspaces) != 2 {
+		t.Fatalf("expected 2 workspaces, got %d", len(workspaces))
+	}
+	// Ordered by name ASC.
+	if workspaces[0].Name != "a-ws" {
+		t.Fatalf("expected first 'a-ws', got %q", workspaces[0].Name)
+	}
+	if workspaces[1].Name != "b-ws" {
+		t.Fatalf("expected second 'b-ws', got %q", workspaces[1].Name)
+	}
+}
+
+func TestUpdateWorkspace(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "updatable"})
+
+	var updatedEvent events.WorkspaceUpdatedPayload
+	_, _ = bus.Subscribe(events.EventWorkspaceUpdated, func(_ context.Context, e events.Event) error {
+		updatedEvent = e.Payload.(events.WorkspaceUpdatedPayload)
+		return nil
+	})
+
+	updated, err := ks.UpdateWorkspace(ctx, "updatable", UpdateWorkspaceParams{
+		Description: ptrString("New description"),
+		Tags:        []string{"updated"},
+	})
+	if err != nil {
+		t.Fatalf("UpdateWorkspace: %v", err)
+	}
+
+	if updated.Description != "New description" {
+		t.Fatalf("description mismatch: %q", updated.Description)
+	}
+	if len(updated.Tags) != 1 || updated.Tags[0] != "updated" {
+		t.Fatalf("tags mismatch: %v", updated.Tags)
+	}
+
+	// Verify event.
+	if updatedEvent.ID != updated.ID {
+		t.Fatalf("event ID mismatch: %q", updatedEvent.ID)
+	}
+	if updatedEvent.Description != "New description" {
+		t.Fatalf("event description mismatch: %q", updatedEvent.Description)
+	}
+}
+
+func TestDeleteWorkspace(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "delete-me"})
+
+	var deletedEvent events.WorkspaceDeletedPayload
+	_, _ = bus.Subscribe(events.EventWorkspaceDeleted, func(_ context.Context, e events.Event) error {
+		deletedEvent = e.Payload.(events.WorkspaceDeletedPayload)
+		return nil
+	})
+
+	w, err := ks.DeleteWorkspace(ctx, "delete-me")
+	if err != nil {
+		t.Fatalf("DeleteWorkspace: %v", err)
+	}
+	if w.Name != "delete-me" {
+		t.Fatalf("expected name 'delete-me', got %q", w.Name)
+	}
+
+	// Verify it's gone.
+	_, err = ks.GetWorkspace(ctx, "delete-me")
+	if err != ErrWorkspaceNotFound {
+		t.Fatalf("expected ErrWorkspaceNotFound after delete, got %v", err)
+	}
+
+	// Verify event.
+	if deletedEvent.ID != w.ID {
+		t.Fatalf("event ID mismatch: %q", deletedEvent.ID)
+	}
+	if deletedEvent.Name != "delete-me" {
+		t.Fatalf("event name mismatch: %q", deletedEvent.Name)
+	}
+}
+
+func TestDeleteWorkspaceClearsAssociations(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws1"})
+
+	// Create a decision and note scoped to the workspace.
+	d, _ := ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:       "WS decision",
+		WorkspaceID: ptrString("ws1"),
+	})
+	n, _ := ks.CreateNote(ctx, CreateNoteParams{
+		Message:     "WS note",
+		WorkspaceID: ptrString("ws1"),
+	})
+
+	// Delete the workspace.
+	ks.DeleteWorkspace(ctx, "ws1")
+
+	// Verify decision and note still exist but workspace_id is cleared.
+	dReloaded, _ := ks.GetDecision(ctx, d.ID)
+	if dReloaded.WorkspaceID != nil {
+		t.Fatalf("expected decision workspace_id to be cleared, got %v", *dReloaded.WorkspaceID)
+	}
+	nReloaded, _ := ks.GetNote(ctx, n.ID)
+	if nReloaded.WorkspaceID != nil {
+		t.Fatalf("expected note workspace_id to be cleared, got %v", *nReloaded.WorkspaceID)
+	}
+}
+
+func TestDeleteWorkspaceNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.DeleteWorkspace(ctx, "nonexistent")
+	if err != ErrWorkspaceNotFound {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
+	}
+}
+
+// ── Workspace files tests ──────────────────────────────────────────
+
+func TestAddWorkspaceFile(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	var itemEvent events.WorkspaceItemAddedPayload
+	_, _ = bus.Subscribe(events.EventWorkspaceItemAdded, func(_ context.Context, e events.Event) error {
+		itemEvent = e.Payload.(events.WorkspaceItemAddedPayload)
+		return nil
+	})
+
+	f, err := ks.AddWorkspaceFile(ctx, "ws", "src/main.go")
+	if err != nil {
+		t.Fatalf("AddWorkspaceFile: %v", err)
+	}
+	if f.Path != "src/main.go" {
+		t.Fatalf("expected path 'src/main.go', got %q", f.Path)
+	}
+
+	// Verify event.
+	if itemEvent.ItemType != "file" || itemEvent.ItemTarget != "src/main.go" {
+		t.Fatalf("event mismatch: type=%q target=%q", itemEvent.ItemType, itemEvent.ItemTarget)
+	}
+
+	// List and verify.
+	files, _ := ks.ListWorkspaceFiles(ctx, "ws")
+	if len(files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(files))
+	}
+	if files[0].Path != "src/main.go" {
+		t.Fatalf("expected path 'src/main.go', got %q", files[0].Path)
+	}
+}
+
+func TestRemoveWorkspaceFile(t *testing.T) {
+	ks, bus, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+	ks.AddWorkspaceFile(ctx, "ws", "src/main.go")
+
+	var removedEvent events.WorkspaceItemRemovedPayload
+	_, _ = bus.Subscribe(events.EventWorkspaceItemRemoved, func(_ context.Context, e events.Event) error {
+		removedEvent = e.Payload.(events.WorkspaceItemRemovedPayload)
+		return nil
+	})
+
+	err := ks.RemoveWorkspaceFile(ctx, "ws", "src/main.go")
+	if err != nil {
+		t.Fatalf("RemoveWorkspaceFile: %v", err)
+	}
+
+	// Verify event.
+	if removedEvent.ItemType != "file" || removedEvent.ItemTarget != "src/main.go" {
+		t.Fatalf("event mismatch: type=%q target=%q", removedEvent.ItemType, removedEvent.ItemTarget)
+	}
+
+	// Verify removal.
+	files, _ := ks.ListWorkspaceFiles(ctx, "ws")
+	if len(files) != 0 {
+		t.Fatalf("expected 0 files after removal, got %d", len(files))
+	}
+}
+
+func TestRemoveWorkspaceFileNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	err := ks.RemoveWorkspaceFile(ctx, "ws", "nonexistent.go")
+	if err == nil {
+		t.Fatal("expected error for nonexistent file")
+	}
+}
+
+// ── Workspace branches tests ────────────────────────────────────────
+
+func TestAddWorkspaceBranch(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	b, err := ks.AddWorkspaceBranch(ctx, "ws", "feat/oauth")
+	if err != nil {
+		t.Fatalf("AddWorkspaceBranch: %v", err)
+	}
+	if b.BranchName != "feat/oauth" {
+		t.Fatalf("expected branch 'feat/oauth', got %q", b.BranchName)
+	}
+
+	branches, _ := ks.ListWorkspaceBranches(ctx, "ws")
+	if len(branches) != 1 {
+		t.Fatalf("expected 1 branch, got %d", len(branches))
+	}
+}
+
+func TestRemoveWorkspaceBranch(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+	ks.AddWorkspaceBranch(ctx, "ws", "feat/oauth")
+
+	err := ks.RemoveWorkspaceBranch(ctx, "ws", "feat/oauth")
+	if err != nil {
+		t.Fatalf("RemoveWorkspaceBranch: %v", err)
+	}
+
+	branches, _ := ks.ListWorkspaceBranches(ctx, "ws")
+	if len(branches) != 0 {
+		t.Fatalf("expected 0 branches after removal, got %d", len(branches))
+	}
+}
+
+func TestRemoveWorkspaceBranchNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "ws"})
+
+	err := ks.RemoveWorkspaceBranch(ctx, "ws", "nonexistent-branch")
+	if err == nil {
+		t.Fatal("expected error for nonexistent branch")
+	}
+}
+
+// ── Workspace status tests ─────────────────────────────────────────
+
+func TestGetWorkspaceStatus(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "full-ws"})
+	ks.AddWorkspaceFile(ctx, "full-ws", "src/main.go")
+	ks.AddWorkspaceBranch(ctx, "full-ws", "main")
+	ks.CreateDecision(ctx, CreateDecisionParams{
+		Title:       "WS decision",
+		WorkspaceID: ptrString("full-ws"),
+	})
+	ks.CreateNote(ctx, CreateNoteParams{
+		Message:     "WS note",
+		WorkspaceID: ptrString("full-ws"),
+	})
+
+	status, err := ks.GetWorkspaceStatus(ctx, "full-ws")
+	if err != nil {
+		t.Fatalf("GetWorkspaceStatus: %v", err)
+	}
+
+	if status.Workspace.Name != "full-ws" {
+		t.Fatalf("workspace name mismatch: %q", status.Workspace.Name)
+	}
+	if len(status.Files) != 1 {
+		t.Fatalf("expected 1 file, got %d", len(status.Files))
+	}
+	if len(status.Branches) != 1 {
+		t.Fatalf("expected 1 branch, got %d", len(status.Branches))
+	}
+	if len(status.Decisions) != 1 {
+		t.Fatalf("expected 1 decision, got %d", len(status.Decisions))
+	}
+	if len(status.Notes) != 1 {
+		t.Fatalf("expected 1 note, got %d", len(status.Notes))
+	}
+	if status.ItemCount != 4 {
+		t.Fatalf("expected 4 total items, got %d", status.ItemCount)
+	}
+	if status.LastActivity == 0 {
+		t.Fatalf("expected non-zero last activity")
+	}
+}
+
+func TestGetWorkspaceStatusEmpty(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	ks.CreateWorkspace(ctx, CreateWorkspaceParams{Name: "empty-ws"})
+
+	status, err := ks.GetWorkspaceStatus(ctx, "empty-ws")
+	if err != nil {
+		t.Fatalf("GetWorkspaceStatus: %v", err)
+	}
+
+	if status.ItemCount != 0 {
+		t.Fatalf("expected 0 items for empty workspace, got %d", status.ItemCount)
+	}
+	if len(status.Files) != 0 || len(status.Branches) != 0 {
+		t.Fatalf("expected empty files/branches, got files=%d branches=%d",
+			len(status.Files), len(status.Branches))
+	}
+}
+
+func TestGetWorkspaceStatusNotFound(t *testing.T) {
+	ks, _, cleanup := newTestStore(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	_, err := ks.GetWorkspaceStatus(ctx, "nonexistent")
+	if err != ErrWorkspaceNotFound {
+		t.Fatalf("expected ErrWorkspaceNotFound, got %v", err)
 	}
 }
 

@@ -36,6 +36,8 @@ as Markdown files in .got/decisions/ with metadata in SQLite.`,
 
 	cmd.AddCommand(newDecisionLinkCmd())
 	cmd.AddCommand(newDecisionSupersedeCmd())
+	cmd.AddCommand(newDecisionUpdateCmd())
+	cmd.AddCommand(newDecisionDeleteCmd())
 
 	return cmd
 }
@@ -629,6 +631,184 @@ func runDecisionSupersede(cmd *cobra.Command, oldID, newID string) error {
 	if newD != nil {
 		fmt.Fprintf(cmd.OutOrStdout(), "  %s (new): %s\n", newID, newD.Title)
 	}
+
+	return nil
+}
+
+// ── Decision update ────────────────────────────────────────────────
+
+func newDecisionUpdateCmd() *cobra.Command {
+	var opts struct {
+		title        string
+		context      string
+		decision     string
+		alternatives string
+		consequences string
+		workspace    string
+		clearWorkspace bool
+	}
+
+	cmd := &cobra.Command{
+		Use:   "update <id>",
+		Short: "Update a decision's body fields",
+		Long: `Update the body fields of an existing architectural decision record.
+
+Only the flags that are explicitly set will be updated. Unset flags
+leave the existing values unchanged.
+
+To clear the workspace, use --workspace "" or --clear-workspace.
+
+Examples:
+  got decision update 01JQZ3ZABC --decision "Revised decision"
+  got decision update 01JQZ3ZABC --context "New context" --consequences "Updated"
+  got decision update 01JQZ3ZABC --title "New title"
+  got decision update 01JQZ3ZABC --clear-workspace`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDecisionUpdate(cmd, args[0], &opts)
+		},
+	}
+
+	flags := cmd.Flags()
+	flags.StringVar(&opts.title, "title", "", "Update the title")
+	flags.StringVar(&opts.context, "context", "", "Update the context/background")
+	flags.StringVar(&opts.decision, "decision", "", "Update the decision made")
+	flags.StringVar(&opts.alternatives, "alternatives", "", "Update alternatives considered")
+	flags.StringVar(&opts.consequences, "consequences", "", "Update positive/negative consequences")
+	flags.StringVar(&opts.workspace, "workspace", "", "Set workspace (empty string to clear)")
+	flags.BoolVar(&opts.clearWorkspace, "clear-workspace", false, "Clear the workspace assignment")
+
+	return cmd
+}
+
+func runDecisionUpdate(cmd *cobra.Command, id string, opts *struct {
+	title          string
+	context        string
+	decision       string
+	alternatives   string
+	consequences   string
+	workspace      string
+	clearWorkspace bool
+}) error {
+	ctx := context.Background()
+
+	// ── Build params from non-empty flags ────────────────────────
+	var params store.UpdateDecisionParams
+
+	if opts.title != "" {
+		params.Title = &opts.title
+	}
+	if opts.context != "" {
+		params.Context = &opts.context
+	}
+	if opts.decision != "" {
+		params.Decision = &opts.decision
+	}
+	if opts.alternatives != "" {
+		params.Alternatives = &opts.alternatives
+	}
+	if opts.consequences != "" {
+		params.Consequences = &opts.consequences
+	}
+
+	// Handle workspace: --workspace "" or --clear-workspace both clear it.
+	if cmd.Flags().Changed("workspace") {
+		params.WorkspaceID = &opts.workspace
+	} else if opts.clearWorkspace {
+		empty := ""
+		params.WorkspaceID = &empty
+	}
+
+	// ── Check that at least one field was provided ───────────────
+	if params.Title == nil && params.Context == nil && params.Decision == nil &&
+		params.Alternatives == nil && params.Consequences == nil && params.WorkspaceID == nil {
+		return fmt.Errorf("update decision: specify at least one field to update (--context, --decision, --consequences, etc.)")
+	}
+
+	// ── Open store ──────────────────────────────────────────────
+	kc, err := openKnowledgeStore()
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+	ks := kc.ks
+
+	// ── Update ──────────────────────────────────────────────────
+	updated, err := ks.UpdateDecision(ctx, id, params)
+	if err != nil {
+		return fmt.Errorf("update decision: %w", err)
+	}
+
+	// ── Output ──────────────────────────────────────────────────
+	fmt.Fprintf(cmd.OutOrStdout(), "Decision updated:\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  ID:     %s\n", updated.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Title:  %s\n", updated.Title)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", updated.Status)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Path:   .got/%s\n", updated.BodyPath)
+
+	return nil
+}
+
+// ── Decision delete ──────────────────────────────────────────────────
+
+func newDecisionDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Permanently delete a decision and its links",
+		Long: `Delete an architectural decision record from the database.
+
+This permanently removes the decision, all its associated links
+(commits, files, workspaces), and the decision body file from disk.
+
+This action cannot be undone. Consider using 'got decision update
+--status rejected' if you want to keep the record but indicate the
+decision was not adopted.
+
+Examples:
+  got decision delete 01JQZ3ZABC`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runDecisionDelete(cmd, args[0])
+		},
+	}
+
+	return cmd
+}
+
+func runDecisionDelete(cmd *cobra.Command, id string) error {
+	ctx := context.Background()
+
+	kc, err := openKnowledgeStore()
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+	ks := kc.ks
+
+	// Fetch first so we can show what's being deleted.
+	d, err := ks.GetDecision(ctx, id)
+	if err != nil {
+		return fmt.Errorf("delete decision: %w", err)
+	}
+
+	if err := ks.DeleteDecision(ctx, id); err != nil {
+		return fmt.Errorf("delete decision: %w", err)
+	}
+
+	// ── Remove the body file from disk ───────────────────────────
+	gotDir, err := findGotDir()
+	if err == nil && d.BodyPath != "" {
+		bodyPath := filepath.Join(gotDir, d.BodyPath)
+		if err := os.Remove(bodyPath); err != nil && !os.IsNotExist(err) {
+			// Warn but don't fail — the DB delete already succeeded.
+			fmt.Fprintf(cmd.ErrOrStderr(), "warning: could not remove body file %s: %v\n", bodyPath, err)
+		}
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Decision deleted:\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  ID:     %s\n", d.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Title:  %s\n", d.Title)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n", d.Status)
 
 	return nil
 }

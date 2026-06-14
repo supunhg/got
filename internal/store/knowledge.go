@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -116,6 +117,25 @@ type OnboardingItem struct {
 	Skipped     bool    `json:"skipped"`
 }
 
+// SearchParams specifies a full-text search across decisions and notes.
+type SearchParams struct {
+	Query       string  // search term
+	Type        *string // "decision", "note", or nil for both
+	WorkspaceID *string // optional workspace filter
+	Limit       int     // 0 means default (20)
+}
+
+// SearchResult is a single match returned by the Search method.
+type SearchResult struct {
+	Type        string  `json:"type"`         // "decision" or "note"
+	ID          string  `json:"id"`
+	Title       string  `json:"title"`        // decision title or note message preview
+	Status      string  `json:"status,omitempty"` // decision status (empty for notes)
+	WorkspaceID *string `json:"workspace_id,omitempty"`
+	CreatedAt   int64   `json:"created_at"`
+	Score       int     `json:"score"`        // number of fields matched (crude relevance)
+}
+
 // OnboardingProgress summarises the scanning progress for a session.
 type OnboardingProgress struct {
 	Session    OnboardingSession          `json:"session"`
@@ -134,6 +154,61 @@ type TypeProgress struct {
 	Remaining int `json:"remaining"`
 }
 
+// ── Workspace domain types ───────────────────────────────────────────
+
+// Workspace represents a logical grouping of related artifacts.
+type Workspace struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Status      string   `json:"status"`          // active | archived
+	Tags        []string `json:"tags,omitempty"`   // JSON array stored in DB
+	CreatedAt   int64    `json:"created_at"`
+	UpdatedAt   int64    `json:"updated_at"`
+}
+
+// WorkspaceFile represents a file tracked in a workspace.
+type WorkspaceFile struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	Path        string `json:"path"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+// WorkspaceBranch represents a branch tracked in a workspace.
+type WorkspaceBranch struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	BranchName  string `json:"branch_name"`
+	CreatedAt   int64  `json:"created_at"`
+}
+
+// WorkspaceStatus holds a summary of a workspace's contents.
+type WorkspaceStatus struct {
+	Workspace   Workspace        `json:"workspace"`
+	Files       []WorkspaceFile  `json:"files"`
+	Branches    []WorkspaceBranch `json:"branches"`
+	Decisions   []Decision        `json:"decisions"`
+	Notes       []Note            `json:"notes"`
+	ItemCount   int              `json:"item_count"`
+	LastActivity int64            `json:"last_activity"`
+}
+
+// CreateWorkspaceParams holds fields for creating a workspace.
+type CreateWorkspaceParams struct {
+	Name        string
+	Description string
+	Tags        []string
+}
+
+// UpdateWorkspaceParams holds fields for updating a workspace.
+type UpdateWorkspaceParams struct {
+	Name        *string
+	Description *string
+	Status      *string // active | archived
+	Tags        []string // nil = no change, empty = clear
+}
+
 // ── Sentinel errors ─────────────────────────────────────────────────
 
 var (
@@ -145,6 +220,8 @@ var (
 	ErrInvalidLinkType      = fmt.Errorf("link type must be one of: commit, file, workspace")
 	ErrDecisionAlreadyLinked = fmt.Errorf("this link already exists")
 	ErrSessionAlreadyComplete = fmt.Errorf("session is already completed")
+	ErrWorkspaceNotFound     = fmt.Errorf("workspace not found")
+	ErrDuplicateWorkspace    = fmt.Errorf("workspace with this name already exists")
 )
 
 // ── KnowledgeStore ──────────────────────────────────────────────────
@@ -446,6 +523,117 @@ func (ks *KnowledgeStore) supersede(ctx context.Context, oldID, newID string, no
 	return nil
 }
 
+// UpdateDecisionParams holds the fields that can be updated on an existing decision.
+type UpdateDecisionParams struct {
+	Title        *string // nil = don't update
+	Context      *string
+	Decision     *string
+	Alternatives *string
+	Consequences *string
+	WorkspaceID  *string // empty string = clear, nil = don't update
+}
+
+// UpdateDecision updates the mutable body fields of an existing decision.
+// Only non-nil fields are applied. Publishes a DecisionUpdated event.
+func (ks *KnowledgeStore) UpdateDecision(ctx context.Context, id string, params UpdateDecisionParams) (*Decision, error) {
+	// Fetch existing first so we can compute the diff and return the updated row.
+	current, err := ks.GetDecision(ctx, id)
+	if err != nil {
+		return nil, err // ErrDecisionNotFound or wrapped
+	}
+
+	now := nowMS()
+	sets := []string{"updated_at = ?"}
+	args := []any{now}
+
+	addField := func(ptr *string, column string) {
+		if ptr != nil {
+			sets = append(sets, fmt.Sprintf("%s = ?", column))
+			args = append(args, *ptr)
+		}
+	}
+
+	addField(params.Title, "title")
+	addField(params.Context, "context")
+	addField(params.Decision, "decision")
+	addField(params.Alternatives, "alternatives")
+	addField(params.Consequences, "consequences")
+
+	if params.WorkspaceID != nil {
+		sets = append(sets, "workspace_id = ?")
+		if *params.WorkspaceID == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *params.WorkspaceID)
+		}
+	}
+
+	if len(sets) == 1 {
+		// Only updated_at was set — no fields to change.
+		return current, nil
+	}
+
+	args = append(args, id)
+	query := fmt.Sprintf(`UPDATE decisions SET %s WHERE id = ?`, strings.Join(sets, ", "))
+
+	if _, err := ks.db.ExecContext(ctx, query, args...); err != nil {
+		return nil, fmt.Errorf("update decision: %w", err)
+	}
+
+	// Re-fetch to return the updated row.
+	updated, err := ks.GetDecision(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventDecisionUpdated, events.DecisionUpdatedPayload{
+			ID:             updated.ID,
+			Title:          updated.Title,
+			Status:         updated.Status,
+			PreviousStatus: current.Status,
+			WorkspaceID:    coalesceStr(updated.WorkspaceID),
+			UpdatedAt:      now,
+		})
+	}
+
+	return updated, nil
+}
+
+// DeleteDecision hard-deletes a decision and its cascade (links,
+// onboarding items). Publishes a DecisionDeleted event.
+func (ks *KnowledgeStore) DeleteDecision(ctx context.Context, id string) error {
+	// Fetch first so we can publish the event with the decision's details.
+	d, err := ks.GetDecision(ctx, id)
+	if err != nil {
+		return err // ErrDecisionNotFound or wrapped
+	}
+
+	now := nowMS()
+
+	result, err := ks.db.ExecContext(ctx, `DELETE FROM decisions WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete decision: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrDecisionNotFound
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventDecisionDeleted, events.DecisionDeletedPayload{
+			ID:          d.ID,
+			Title:       d.Title,
+			Status:      d.Status,
+			WorkspaceID: coalesceStr(d.WorkspaceID),
+			DeletedAt:   now,
+		})
+	}
+
+	return nil
+}
+
 // ── Note CRUD ───────────────────────────────────────────────────────
 
 // CreateNote inserts a new note and publishes NoteAdded.
@@ -516,6 +704,40 @@ func (ks *KnowledgeStore) GetNote(ctx context.Context, id string) (*Note, error)
 	return n, nil
 }
 
+// DeleteNote hard-deletes a note from the database. Publishes a
+// NoteDeleted event.
+func (ks *KnowledgeStore) DeleteNote(ctx context.Context, id string) error {
+	// Fetch first so we can publish the event with the note's details.
+	n, err := ks.GetNote(ctx, id)
+	if err != nil {
+		return err // ErrNoteNotFound or wrapped
+	}
+
+	now := nowMS()
+
+	result, err := ks.db.ExecContext(ctx, `DELETE FROM notes WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("delete note: %w", err)
+	}
+
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return ErrNoteNotFound
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventNoteDeleted, events.NoteDeletedPayload{
+			ID:          n.ID,
+			Message:     n.Message,
+			WorkspaceID: coalesceStr(n.WorkspaceID),
+			Branch:      n.Branch,
+			DeletedAt:   now,
+		})
+	}
+
+	return nil
+}
+
 // ListNotes returns notes matching the given filter, ordered by
 // created_at descending. Default limit is 20.
 func (ks *KnowledgeStore) ListNotes(ctx context.Context, filter NoteFilter) ([]Note, error) {
@@ -566,6 +788,102 @@ func (ks *KnowledgeStore) ListNotes(ctx context.Context, filter NoteFilter) ([]N
 		notes = append(notes, n)
 	}
 	return notes, rows.Err()
+}
+
+// ── Search ──────────────────────────────────────────────────────────
+
+// Search performs a full-text LIKE search across decisions (title,
+// context, decision, alternatives, consequences) and notes (message).
+// Returns results ordered by relevance (score) then recency.
+func (ks *KnowledgeStore) Search(ctx context.Context, params SearchParams) ([]SearchResult, error) {
+	q := strings.TrimSpace(params.Query)
+	if q == "" {
+		return []SearchResult{}, nil
+	}
+
+	if params.Limit <= 0 {
+		params.Limit = 20
+	}
+
+	pattern := "%" + q + "%"
+
+	var conditions []string
+	var args []any	// ── Decisions sub-query ──────────────────────────────────────
+		if params.Type == nil || *params.Type == "decision" {
+			decScore := `(CASE WHEN title LIKE ? THEN 1 ELSE 0 END +
+			              CASE WHEN context LIKE ? THEN 1 ELSE 0 END +
+			              CASE WHEN decision LIKE ? THEN 1 ELSE 0 END +
+			              CASE WHEN alternatives LIKE ? THEN 1 ELSE 0 END +
+			              CASE WHEN consequences LIKE ? THEN 1 ELSE 0 END)`
+			decWhereCond := `(title LIKE ? OR context LIKE ? OR decision LIKE ? OR alternatives LIKE ? OR consequences LIKE ?)`
+
+			decWhere := "WHERE " + decWhereCond
+			// Score `?`s first, then WHERE `?`s — args must match this order.
+			decScoreArgs := []any{pattern, pattern, pattern, pattern, pattern}
+			decWhereArgs := []any{pattern, pattern, pattern, pattern, pattern}
+
+			if params.WorkspaceID != nil && *params.WorkspaceID != "" {
+				decWhere += " AND workspace_id = ?"
+				decWhereArgs = append(decWhereArgs, *params.WorkspaceID)
+			}
+
+			conditions = append(conditions, fmt.Sprintf(`
+SELECT 'decision' AS type, id, title, status, workspace_id, created_at, %s AS score
+FROM decisions %s`, decScore, decWhere))
+			args = append(args, decScoreArgs...)  // score ?s first
+			args = append(args, decWhereArgs...)  // then WHERE ?s
+		}
+
+		// ── Notes sub-query ──────────────────────────────────────────
+		if params.Type == nil || *params.Type == "note" {
+			noteScore := `CASE WHEN message LIKE ? THEN 1 ELSE 0 END`
+			noteCond := `message LIKE ?`
+
+			noteWhere := "WHERE " + noteCond
+			noteScoreArgs := []any{pattern}
+			noteWhereArgs := []any{pattern}
+
+			if params.WorkspaceID != nil && *params.WorkspaceID != "" {
+				noteWhere += " AND workspace_id = ?"
+				noteWhereArgs = append(noteWhereArgs, *params.WorkspaceID)
+			}
+
+			conditions = append(conditions, fmt.Sprintf(`
+SELECT 'note' AS type, id, message AS title, '' AS status, workspace_id, created_at, %s AS score
+FROM notes %s`, noteScore, noteWhere))
+			args = append(args, noteScoreArgs...)  // score ?s first
+			args = append(args, noteWhereArgs...)  // then WHERE ?s
+	}
+
+	if len(conditions) == 0 {
+		return []SearchResult{}, nil
+	}
+
+	query := strings.Join(conditions, " UNION ALL ")
+	query += " ORDER BY score DESC, created_at DESC"
+	query += fmt.Sprintf(" LIMIT %d", params.Limit)
+
+	rows, err := ks.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("search: %w", err)
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var r SearchResult
+		var workspaceID sql.NullString
+		if err := rows.Scan(&r.Type, &r.ID, &r.Title, &r.Status,
+			&workspaceID, &r.CreatedAt, &r.Score); err != nil {
+			return nil, fmt.Errorf("scan search result: %w", err)
+		}
+		if workspaceID.Valid {
+			r.WorkspaceID = &workspaceID.String
+		}
+		results = append(results, r)
+	}
+
+	return results, rows.Err()
 }
 
 // ── Onboarding CRUD ────────────────────────────────────────────────
@@ -824,6 +1142,437 @@ func (ks *KnowledgeStore) CompleteOnboarding(ctx context.Context, sessionID stri
 	return nil
 }
 
+// ── Workspace CRUD ────────────────────────────────────────────────
+
+// CreateWorkspace inserts a new workspace and publishes WorkspaceCreated.
+func (ks *KnowledgeStore) CreateWorkspace(ctx context.Context, params CreateWorkspaceParams) (*Workspace, error) {
+	name := strings.TrimSpace(params.Name)
+	if name == "" {
+		return nil, fmt.Errorf("workspace name is required")
+	}
+
+	now := nowMS()
+	id := newULID()
+
+	// Encoded tags as JSON array.
+	tagsJSON := "[]"
+	if len(params.Tags) > 0 {
+		tj, err := json.Marshal(params.Tags)
+		if err != nil {
+			return nil, fmt.Errorf("marshal tags: %w", err)
+		}
+		tagsJSON = string(tj)
+	}
+
+	w := &Workspace{
+		ID:          id,
+		Name:        name,
+		Description: params.Description,
+		Status:      "active",
+		Tags:        params.Tags,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+
+	_, err := ks.db.ExecContext(ctx, `
+		INSERT INTO workspaces (id, name, description, status, tags, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		w.ID, w.Name, w.Description, w.Status, tagsJSON, w.CreatedAt, w.UpdatedAt,
+	)
+	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint") {
+			return nil, ErrDuplicateWorkspace
+		}
+		return nil, fmt.Errorf("insert workspace: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceCreated, events.WorkspaceCreatedPayload{
+			ID:          w.ID,
+			Name:        w.Name,
+			Description: w.Description,
+			Tags:        w.Tags,
+			CreatedAt:   w.CreatedAt,
+		})
+	}
+
+	return w, nil
+}
+
+// GetWorkspace retrieves a workspace by name (the user-facing identifier).
+func (ks *KnowledgeStore) GetWorkspace(ctx context.Context, name string) (*Workspace, error) {
+	return ks.getWorkspaceBy(ctx, "name", name)
+}
+
+// GetWorkspaceByID retrieves a workspace by ULID.
+func (ks *KnowledgeStore) GetWorkspaceByID(ctx context.Context, id string) (*Workspace, error) {
+	return ks.getWorkspaceBy(ctx, "id", id)
+}
+
+func (ks *KnowledgeStore) getWorkspaceBy(ctx context.Context, column, value string) (*Workspace, error) {
+	w := &Workspace{}
+	var tagsJSON string
+
+	query := fmt.Sprintf(`
+		SELECT id, name, description, status, tags, created_at, updated_at
+		FROM workspaces WHERE %s = ?`, column)
+
+	err := ks.db.QueryRowContext(ctx, query, value).Scan(
+		&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrWorkspaceNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get workspace: %w", err)
+	}
+
+	// Parse tags JSON.
+	if tagsJSON != "" && tagsJSON != "[]" {
+		_ = json.Unmarshal([]byte(tagsJSON), &w.Tags)
+	}
+
+	return w, nil
+}
+
+// ListWorkspaces returns all workspaces, ordered by name.
+func (ks *KnowledgeStore) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, name, description, status, tags, created_at, updated_at
+		FROM workspaces
+		ORDER BY name ASC`)
+	if err != nil {
+		return nil, fmt.Errorf("list workspaces: %w", err)
+	}
+	defer rows.Close()
+
+	return scanWorkspaces(rows)
+}
+
+// UpdateWorkspace updates mutable fields of a workspace. Publishes WorkspaceUpdated.
+func (ks *KnowledgeStore) UpdateWorkspace(ctx context.Context, name string, params UpdateWorkspaceParams) (*Workspace, error) {
+	current, err := ks.GetWorkspace(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	now := nowMS()
+	sets := []string{"updated_at = ?"}
+	args := []any{now}
+
+	if params.Name != nil {
+		sets = append(sets, "name = ?")
+		args = append(args, *params.Name)
+	}
+	if params.Description != nil {
+		sets = append(sets, "description = ?")
+		args = append(args, *params.Description)
+	}
+	if params.Status != nil {
+		sets = append(sets, "status = ?")
+		args = append(args, *params.Status)
+	}
+	if params.Tags != nil {
+		tagsJSON := "[]"
+		if len(params.Tags) > 0 {
+			tj, _ := json.Marshal(params.Tags)
+			tagsJSON = string(tj)
+		}
+		sets = append(sets, "tags = ?")
+		args = append(args, tagsJSON)
+	}
+
+	if len(sets) == 1 {
+		return current, nil
+	}
+
+	args = append(args, current.ID)
+	query := fmt.Sprintf(`UPDATE workspaces SET %s WHERE id = ?`, strings.Join(sets, ", "))
+
+	if _, err := ks.db.ExecContext(ctx, query, args...); err != nil {
+		return nil, fmt.Errorf("update workspace: %w", err)
+	}
+
+	updated, err := ks.GetWorkspaceByID(ctx, current.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceUpdated, events.WorkspaceUpdatedPayload{
+			ID:          updated.ID,
+			Name:        updated.Name,
+			Description: updated.Description,
+			Tags:        updated.Tags,
+			UpdatedAt:   now,
+		})
+	}
+
+	return updated, nil
+}
+
+// DeleteWorkspace hard-deletes a workspace and its cascade (files, branches,
+// decisions, notes). Does NOT delete the decisions/notes themselves — they
+// are handled via ON DELETE SET NULL on workspace_id in those tables, but
+// since we use a string reference (not FK), we clear them explicitly.
+func (ks *KnowledgeStore) DeleteWorkspace(ctx context.Context, name string) (*Workspace, error) {
+	w, err := ks.GetWorkspace(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+
+	now := nowMS()
+
+	// Clear workspace_id on decisions and notes linked to this workspace.
+	_, _ = ks.db.ExecContext(ctx, `UPDATE decisions SET workspace_id = NULL WHERE workspace_id = ?`, w.Name)
+	_, _ = ks.db.ExecContext(ctx, `UPDATE notes SET workspace_id = NULL WHERE workspace_id = ?`, w.Name)
+
+	// Delete workspace (cascades to workspace_files, workspace_branches).
+	result, err := ks.db.ExecContext(ctx, `DELETE FROM workspaces WHERE id = ?`, w.ID)
+	if err != nil {
+		return nil, fmt.Errorf("delete workspace: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return nil, ErrWorkspaceNotFound
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceDeleted, events.WorkspaceDeletedPayload{
+			ID:        w.ID,
+			Name:      w.Name,
+			ItemCount: 0,
+			DeletedAt: now,
+		})
+	}
+
+	return w, nil
+}
+
+// ── Workspace files ─────────────────────────────────────────────────
+
+// AddWorkspaceFile adds a file path to a workspace. Publishes WorkspaceItemAdded.
+func (ks *KnowledgeStore) AddWorkspaceFile(ctx context.Context, workspaceName, filePath string) (*WorkspaceFile, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	now := nowMS()
+	id := newULID()
+
+	f := &WorkspaceFile{
+		ID:          id,
+		WorkspaceID: w.ID,
+		Path:        filePath,
+		CreatedAt:   now,
+	}
+
+	_, err = ks.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO workspace_files (id, workspace_id, path, created_at)
+		VALUES (?, ?, ?, ?)`, f.ID, f.WorkspaceID, f.Path, f.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("add workspace file: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceItemAdded, events.WorkspaceItemAddedPayload{
+			WorkspaceID: w.ID,
+			ItemType:    "file",
+			ItemTarget:  filePath,
+			CreatedAt:   now,
+		})
+	}
+
+	return f, nil
+}
+
+// RemoveWorkspaceFile removes a file path from a workspace. Publishes WorkspaceItemRemoved.
+func (ks *KnowledgeStore) RemoveWorkspaceFile(ctx context.Context, workspaceName, filePath string) error {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return err
+	}
+
+	result, err := ks.db.ExecContext(ctx, `
+		DELETE FROM workspace_files WHERE workspace_id = ? AND path = ?`, w.ID, filePath)
+	if err != nil {
+		return fmt.Errorf("remove workspace file: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("file %q not found in workspace %q", filePath, workspaceName)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceItemRemoved, events.WorkspaceItemRemovedPayload{
+			WorkspaceID: w.ID,
+			ItemType:    "file",
+			ItemTarget:  filePath,
+			RemovedAt:   nowMS(),
+		})
+	}
+
+	return nil
+}
+
+// ListWorkspaceFiles returns all files tracked in a workspace.
+func (ks *KnowledgeStore) ListWorkspaceFiles(ctx context.Context, workspaceName string) ([]WorkspaceFile, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, workspace_id, path, created_at
+		FROM workspace_files WHERE workspace_id = ?
+		ORDER BY path ASC`, w.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list workspace files: %w", err)
+	}
+	defer rows.Close()
+
+	return scanWorkspaceFiles(rows)
+}
+
+// ── Workspace branches ──────────────────────────────────────────────
+
+// AddWorkspaceBranch adds a branch name to a workspace. Publishes WorkspaceItemAdded.
+func (ks *KnowledgeStore) AddWorkspaceBranch(ctx context.Context, workspaceName, branchName string) (*WorkspaceBranch, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	now := nowMS()
+	id := newULID()
+
+	b := &WorkspaceBranch{
+		ID:          id,
+		WorkspaceID: w.ID,
+		BranchName:  branchName,
+		CreatedAt:   now,
+	}
+
+	_, err = ks.db.ExecContext(ctx, `
+		INSERT OR IGNORE INTO workspace_branches (id, workspace_id, branch_name, created_at)
+		VALUES (?, ?, ?, ?)`, b.ID, b.WorkspaceID, b.BranchName, b.CreatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("add workspace branch: %w", err)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceItemAdded, events.WorkspaceItemAddedPayload{
+			WorkspaceID: w.ID,
+			ItemType:    "branch",
+			ItemTarget:  branchName,
+			CreatedAt:   now,
+		})
+	}
+
+	return b, nil
+}
+
+// RemoveWorkspaceBranch removes a branch from a workspace. Publishes WorkspaceItemRemoved.
+func (ks *KnowledgeStore) RemoveWorkspaceBranch(ctx context.Context, workspaceName, branchName string) error {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return err
+	}
+
+	result, err := ks.db.ExecContext(ctx, `
+		DELETE FROM workspace_branches WHERE workspace_id = ? AND branch_name = ?`, w.ID, branchName)
+	if err != nil {
+		return fmt.Errorf("remove workspace branch: %w", err)
+	}
+	rows, _ := result.RowsAffected()
+	if rows == 0 {
+		return fmt.Errorf("branch %q not found in workspace %q", branchName, workspaceName)
+	}
+
+	if ks.bus != nil {
+		_ = ks.bus.Publish(ctx, events.EventWorkspaceItemRemoved, events.WorkspaceItemRemovedPayload{
+			WorkspaceID: w.ID,
+			ItemType:    "branch",
+			ItemTarget:  branchName,
+			RemovedAt:   nowMS(),
+		})
+	}
+
+	return nil
+}
+
+// ListWorkspaceBranches returns all branches tracked in a workspace.
+func (ks *KnowledgeStore) ListWorkspaceBranches(ctx context.Context, workspaceName string) ([]WorkspaceBranch, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := ks.db.QueryContext(ctx, `
+		SELECT id, workspace_id, branch_name, created_at
+		FROM workspace_branches WHERE workspace_id = ?
+		ORDER BY branch_name ASC`, w.ID)
+	if err != nil {
+		return nil, fmt.Errorf("list workspace branches: %w", err)
+	}
+	defer rows.Close()
+
+	return scanWorkspaceBranches(rows)
+}
+
+// ── Workspace status ────────────────────────────────────────────────
+
+// GetWorkspaceStatus returns a full summary of a workspace's contents —
+// its metadata, tracked files, tracked branches, linked decisions, and
+// linked notes. Also computes item count and last activity timestamp.
+func (ks *KnowledgeStore) GetWorkspaceStatus(ctx context.Context, workspaceName string) (*WorkspaceStatus, error) {
+	w, err := ks.GetWorkspace(ctx, workspaceName)
+	if err != nil {
+		return nil, err
+	}
+
+	files, _ := ks.ListWorkspaceFiles(ctx, workspaceName)
+	branches, _ := ks.ListWorkspaceBranches(ctx, workspaceName)
+
+	// Fetch decisions scoped to this workspace.
+	decisions, _ := ks.ListDecisions(ctx, DecisionFilter{WorkspaceID: &w.Name, All: true})
+
+	// Fetch notes scoped to this workspace.
+	notes, _ := ks.ListNotes(ctx, NoteFilter{WorkspaceID: &w.Name, All: true})
+
+	if files == nil {
+		files = []WorkspaceFile{}
+	}
+	if branches == nil {
+		branches = []WorkspaceBranch{}
+	}
+	if decisions == nil {
+		decisions = []Decision{}
+	}
+	if notes == nil {
+		notes = []Note{}
+	}
+
+	totalItems := len(files) + len(branches) + len(decisions) + len(notes)
+
+	// Compute last activity as max of all timestamps.
+	lastActivity := w.UpdatedAt
+	if w.CreatedAt > lastActivity {
+		lastActivity = w.CreatedAt
+	}
+
+	return &WorkspaceStatus{
+		Workspace:    *w,
+		Files:        files,
+		Branches:     branches,
+		Decisions:    decisions,
+		Notes:        notes,
+		ItemCount:    totalItems,
+		LastActivity: lastActivity,
+	}, nil
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 
 // newULID generates a ULID-like identifier: 10 chars of base32-encoded
@@ -906,6 +1655,51 @@ func scanOnboardingItems(rows *sql.Rows) ([]OnboardingItem, error) {
 		items = append(items, item)
 	}
 	return items, rows.Err()
+}
+
+// scanWorkspaces scans workspace rows into a slice.
+func scanWorkspaces(rows *sql.Rows) ([]Workspace, error) {
+	var workspaces []Workspace
+	for rows.Next() {
+		var w Workspace
+		var tagsJSON string
+		if err := rows.Scan(
+			&w.ID, &w.Name, &w.Description, &w.Status, &tagsJSON, &w.CreatedAt, &w.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("scan workspace: %w", err)
+		}
+		if tagsJSON != "" && tagsJSON != "[]" {
+			_ = json.Unmarshal([]byte(tagsJSON), &w.Tags)
+		}
+		workspaces = append(workspaces, w)
+	}
+	return workspaces, rows.Err()
+}
+
+// scanWorkspaceFiles scans workspace_file rows into a slice.
+func scanWorkspaceFiles(rows *sql.Rows) ([]WorkspaceFile, error) {
+	var files []WorkspaceFile
+	for rows.Next() {
+		var f WorkspaceFile
+		if err := rows.Scan(&f.ID, &f.WorkspaceID, &f.Path, &f.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan workspace file: %w", err)
+		}
+		files = append(files, f)
+	}
+	return files, rows.Err()
+}
+
+// scanWorkspaceBranches scans workspace_branch rows into a slice.
+func scanWorkspaceBranches(rows *sql.Rows) ([]WorkspaceBranch, error) {
+	var branches []WorkspaceBranch
+	for rows.Next() {
+		var b WorkspaceBranch
+		if err := rows.Scan(&b.ID, &b.WorkspaceID, &b.BranchName, &b.CreatedAt); err != nil {
+			return nil, fmt.Errorf("scan workspace branch: %w", err)
+		}
+		branches = append(branches, b)
+	}
+	return branches, rows.Err()
 }
 
 // coalesceStr returns the dereferenced string or "" if the pointer is nil.

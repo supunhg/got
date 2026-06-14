@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -54,10 +55,24 @@ func runInit(cmd *cobra.Command, args []string, force bool) error {
 		return fmt.Errorf("init: resolve path: %w", err)
 	}
 
-	// ── Find repo root (walk up for .git/) ───────────────────────
+	// ── Create Git repository if one doesn't exist ───────────────
 	repoRoot, err := findGitDir(target)
 	if err != nil {
-		return fmt.Errorf("init: not a Git repository: %w\n  Use 'git init' first, then run 'got init'", err)
+		// No Git repo found — initialize one.
+		fmt.Fprintf(cmd.OutOrStdout(), "No Git repository found at %s — initializing one...\n", target)
+
+		if err := initGitRepo(target); err != nil {
+			return fmt.Errorf("init: git init: %w", err)
+		}
+
+		repoRoot = target
+		fmt.Fprintf(cmd.OutOrStdout(), "  Git repository initialized at %s\n", repoRoot)
+
+		// Walk again now that .git exists.
+		repoRoot, err = findGitDir(target)
+		if err != nil {
+			return fmt.Errorf("init: unexpected: %w", err)
+		}
 	}
 
 	gotDir := filepath.Join(repoRoot, ".got")
@@ -139,6 +154,50 @@ ai:
 	fmt.Fprintf(cmd.OutOrStdout(), "  got.yml            Project configuration\n")
 	fmt.Fprintf(cmd.OutOrStdout(), "  .gitignore         .got/ added to ignore file\n")
 	fmt.Fprintf(cmd.OutOrStdout(), "\nNext: try 'got decision create' or 'got note add'\n")
+
+	return nil
+}
+
+// initGitRepo runs 'git init -b main' in the given directory.
+func initGitRepo(dir string) error {
+	cmd := exec.Command("git", "init", "-b", "main")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("git init: %w\n%s", err, out)
+	}
+
+	// Configure minimal user identity if not already set.
+	for _, kv := range []struct{ k, v string }{
+		{"user.name", "GOT User"},
+		{"user.email", "user@got.sh"},
+	} {
+		// Use set, not replace, to avoid erroring if already set.
+		c := exec.Command("git", "config", kv.k, kv.v)
+		c.Dir = dir
+		_ = c.Run() // best-effort; user may have global config
+	}
+
+	// Create an initial README.md and commit it so HEAD is never unborn.
+	readmePath := filepath.Join(dir, "README.md")
+	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
+		projectName := filepath.Base(dir)
+		readmeContent := fmt.Sprintf("# %s\n\nInitialized by GOT.\n", projectName)
+		if err := os.WriteFile(readmePath, []byte(readmeContent), 0644); err != nil {
+			return fmt.Errorf("write README.md: %w", err)
+		}
+
+		c := exec.Command("git", "add", "README.md")
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			return fmt.Errorf("git add README.md: %w\n%s", err, out)
+		}
+
+		c = exec.Command("git", "commit", "-m", "Initial commit")
+		c.Dir = dir
+		if out, err := c.CombinedOutput(); err != nil {
+			return fmt.Errorf("initial commit: %w\n%s", err, out)
+		}
+	}
 
 	return nil
 }

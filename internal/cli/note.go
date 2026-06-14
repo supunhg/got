@@ -27,6 +27,7 @@ links, and rationale that don't warrant a full decision record.`,
 	cmd.AddCommand(newNoteAddCmd())
 	cmd.AddCommand(newNoteListCmd())
 	cmd.AddCommand(newNoteShowCmd())
+	cmd.AddCommand(newNoteDeleteCmd())
 
 	return cmd
 }
@@ -199,6 +200,54 @@ func outputNotesTable(cmd *cobra.Command, notes []store.Note) error {
 	}
 
 	return w.Flush()
+}
+
+// ── Note delete ─────────────────────────────────────────────────────
+
+func newNoteDeleteCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "delete <id>",
+		Short: "Permanently delete a note",
+		Long: `Delete a freeform knowledge note from the database.
+
+This permanently removes the note. This action cannot be undone.
+
+Examples:
+  got note delete 01JQZ3ZABC`,
+		Args: cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runNoteDelete(cmd, args[0])
+		},
+	}
+
+	return cmd
+}
+
+func runNoteDelete(cmd *cobra.Command, id string) error {
+	ctx := context.Background()
+
+	kc, err := openKnowledgeStore()
+	if err != nil {
+		return err
+	}
+	defer kc.Close()
+	ks := kc.ks
+
+	// Fetch first so we can show what's being deleted.
+	n, err := ks.GetNote(ctx, id)
+	if err != nil {
+		return fmt.Errorf("delete note: %w", err)
+	}
+
+	if err := ks.DeleteNote(ctx, id); err != nil {
+		return fmt.Errorf("delete note: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Note deleted:\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  ID:      %s\n", n.ID)
+	fmt.Fprintf(cmd.OutOrStdout(), "  Message: %s\n", truncate(n.Message, 60))
+
+	return nil
 }
 
 // ── Note show ───────────────────────────────────────────────────────
