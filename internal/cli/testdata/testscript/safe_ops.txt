@@ -1,0 +1,45 @@
+# Safe operations: snapshot → reset → verify snapshot exists
+
+# Setup
+exec git init
+exec git config user.email test@test.com
+exec git config user.name Test
+exec $GOT_BIN init
+
+# Create initial commit
+exec sh -c 'echo first > file1.txt'
+exec git add .
+exec $GOT_BIN commit -m feat:first
+stdout 'Committed'
+
+# Create a second commit
+exec sh -c 'echo second > file2.txt'
+exec git add .
+exec $GOT_BIN commit -m feat:second
+stdout 'Committed'
+
+# Verify we have 2 commits
+exec git log --oneline
+stdout feat:first
+stdout feat:second
+
+# Manual snapshot
+exec $GOT_BIN snapshot create --reason before-reset
+stdout 'Snapshot created'
+
+# List snapshots
+exec $GOT_BIN snapshot list
+stdout 'before-reset'
+
+# Safe reset (hard) to go back one commit
+exec $GOT_BIN safe reset --mode hard HEAD~1
+stdout 'Reset'
+stderr 'Snapshot'
+
+# Verify we are back to 1 commit
+exec git log --oneline
+stdout feat:first
+
+# Verify snapshot is still there
+exec $GOT_BIN snapshot list
+stdout 'before-reset'

@@ -1,0 +1,37 @@
+# Workspace sync: create → add files → delete → sync detects stale
+
+# Setup
+exec git init
+exec git config user.email test@test.com
+exec git config user.name Test
+exec $GOT_BIN init
+
+# Create workspace and add files
+exec $GOT_BIN workspace create sync-test
+exec sh -c 'echo a > file_a.txt'
+exec sh -c 'echo b > file_b.txt'
+exec git add .
+exec $GOT_BIN commit -m feat:files
+
+exec $GOT_BIN workspace add-file sync-test file_a.txt
+stdout 'Added file'
+
+exec $GOT_BIN workspace add-file sync-test file_b.txt
+stdout 'Added file'
+
+# Verify 2 files tracked
+exec $GOT_BIN workspace show sync-test
+stdout 'file_a.txt'
+stdout 'file_b.txt'
+
+# Delete file_b.txt from disk
+exec sh -c 'rm file_b.txt'
+
+# Sync should detect stale file
+exec $GOT_BIN workspace sync sync-test --no-cleanup
+stdout '1 stale'
+stdout 'file_b.txt'
+
+# Now run cleanup
+exec $GOT_BIN workspace sync sync-test
+stdout 'Removed stale file'

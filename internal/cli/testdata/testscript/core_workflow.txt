@@ -1,0 +1,48 @@
+# Core workflow: init → workspace → commit → verify
+
+# Initialize a git repo
+exec git init
+exec git config user.email test@test.com
+exec git config user.name Test
+
+# Initialize GOT
+exec $GOT_BIN init
+exists .got/got.db
+
+# Create workspace
+exec $GOT_BIN workspace create test-workspace --description test-workspace --tags test,ci
+stdout 'Workspace created'
+
+# Verify workspace listed
+exec $GOT_BIN workspace list
+stdout 'test-workspace'
+
+# Create a file and commit
+exec sh -c 'echo hello > main.go'
+exec git add .
+exec $GOT_BIN commit -m feat:initial-code
+stdout 'Committed'
+
+# Verify workspace shows the commit
+exec $GOT_BIN workspace show test-workspace
+stdout 'test-workspace'
+
+# Create a decision
+exec $GOT_BIN decision create --title UseGo --context Performance --decision Go-chosen --no-interactive
+stdout 'Decision created'
+
+# Verify decision
+exec $GOT_BIN decision list
+stdout 'UseGo'
+
+# Create a note
+exec $GOT_BIN note add Remember-tests --workspace test-workspace
+stdout 'Note added'
+
+# Search for the decision
+exec $GOT_BIN search Go
+stdout 'UseGo'
+
+# Health check
+exec $GOT_BIN health
+stdout 'All checks passed'

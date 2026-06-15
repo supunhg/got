@@ -1,0 +1,16 @@
+# Onboarding: start session and verify it creates items
+
+# Setup
+exec git init
+exec git config user.email test@test.com
+exec git config user.name Test
+exec $GOT_BIN init
+
+# Create some decisions first
+exec $GOT_BIN decision create --title FirstDecision --context ctx1 --decision dec1 --no-interactive
+exec $GOT_BIN decision create --title SecondDecision --context ctx2 --decision dec2 --no-interactive
+
+# Start onboarding - should seed with existing decisions
+exec $GOT_BIN onboard start
+stdout 'Onboarding session'
+stdout 'active'
