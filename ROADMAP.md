@@ -92,6 +92,14 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - Added Worktree/Submodule types to git adapter
 - Added WorktreeCreated/Deleted events
 
+### v2.0 — Plugin Ecosystem
+- Event replay: bus stores history (1000 events), Replay() method
+- NDJSON streaming: SubscribeNDJSON() for real-time event subscription
+- Knowledge TUI tab: displays decisions and notes with status colors
+- Plugin search command: `got plugin search` (registry scaffold)
+- Plugin install/remove/list/enable/disable/run commands
+- All 170 tests pass
+
 ## Design Principles
 
 These principles guide all design decisions:
