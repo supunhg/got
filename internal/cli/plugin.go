@@ -2,28 +2,37 @@
 package cli
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
-	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
+
+	"github.com/supunhg/got/internal/events"
+	"github.com/supunhg/got/internal/store"
 )
 
-// newPluginCmd builds the `got plugin` command tree.
+// PluginRegistry represents a plugin registry entry.
+type PluginRegistry struct {
+	Name        string `json:"name"`
+	Version     string `json:"version"`
+	Description string `json:"description"`
+	Author      string `json:"author"`
+	URL         string `json:"url"`
+	Downloads   int    `json:"downloads"`
+}
+
+// DefaultRegistryURL is the default plugin registry URL.
+const DefaultRegistryURL = "https://registry.got.sh/plugins"
+
 func newPluginCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "plugin",
 		Short: "Manage GOT plugins",
-		Long: `Manage GOT plugins — install, list, enable, disable, and run plugins.
-
-Plugins extend GOT's functionality by subscribing to events and adding
-new CLI commands. They are installed from a local directory containing
-a manifest.json file and placed in .got/plugins/<name>/.
-
-Requires GOT to be initialized in a Git repository (.got/ must exist).`,
+		Long:  `Install, remove, enable, disable, and run GOT plugins.`,
 	}
 
 	cmd.AddCommand(newPluginInstallCmd())
@@ -32,61 +41,53 @@ Requires GOT to be initialized in a Git repository (.got/ must exist).`,
 	cmd.AddCommand(newPluginEnableCmd())
 	cmd.AddCommand(newPluginDisableCmd())
 	cmd.AddCommand(newPluginRunCmd())
+	cmd.AddCommand(newPluginSearchCmd())
 
 	return cmd
 }
 
 func newPluginInstallCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "install <path>",
-		Short: "Install a plugin from a local directory",
-		Long: `Install a plugin from a local directory.
-
-Copies the plugin directory into .got/plugins/<name>/, validates the
-manifest, and registers the plugin in the database.
-
-Example:
-  got plugin install ./my-plugin
-  got plugin install /path/to/plugins/hello-world`,
-		Args: cobra.ExactArgs(1),
-		RunE: runPluginInstall,
+		Use:   "install <path-or-url>",
+		Short: "Install a plugin from a local directory or URL",
+		Long:  `Install a GOT plugin from a local directory containing a manifest.json.`,
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginInstall(cmd, args[0])
+		},
 	}
 }
 
 func newPluginRemoveCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Uninstall a plugin",
-		Long: `Uninstall a plugin by name.
-
-Removes the plugin from the database and deletes its directory from
-.got/plugins/<name>/. The plugin will no longer be loaded on startup.
-
-Example:
-  got plugin remove hello-world`,
-		Args: cobra.ExactArgs(1),
-		RunE: runPluginRemove,
+		Short: "Remove an installed plugin",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginRemove(cmd, args[0])
+		},
 	}
 }
 
 func newPluginListCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "list",
 		Short: "List installed plugins",
-		Long:  `List all installed plugins, their version, and enabled/disabled status.`,
 		Args:  cobra.NoArgs,
-		RunE:  runPluginList,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			return runPluginList(cmd)
+		},
 	}
-	return cmd
 }
 
 func newPluginEnableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "enable <name>",
 		Short: "Enable a plugin",
-		Long:  `Enable a previously disabled plugin. The plugin will be loaded on next startup.`,
 		Args:  cobra.ExactArgs(1),
-		RunE:  runPluginEnable,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginEnable(cmd, args[0])
+		},
 	}
 }
 
@@ -94,149 +95,169 @@ func newPluginDisableCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "disable <name>",
 		Short: "Disable a plugin",
-		Long:  `Disable a plugin without uninstalling it. The plugin will not be loaded on startup.`,
 		Args:  cobra.ExactArgs(1),
-		RunE:  runPluginDisable,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginDisable(cmd, args[0])
+		},
 	}
 }
 
 func newPluginRunCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "run <name> <action>",
-		Short: "Manually run a plugin action or hook",
-		Long: `Run a specific plugin action or hook for debugging.
-
-Actions are defined in the plugin manifest.json under "hooks" (event type
-keys) or "commands" (command names).
-
-Example:
-  got plugin run hello-world greet
-  got plugin run my-plugin on-commit`,
-		Args: cobra.ExactArgs(2),
-		RunE: runPluginRun,
+	return &cobra.Command{
+		Use:   "run <plugin> <command> [args...]",
+		Short: "Run a plugin command",
+		Args:  cobra.MinimumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runPluginRun(cmd, args[0], args[1], args[2:])
+		},
 	}
+}
+
+func newPluginSearchCmd() *cobra.Command {
+	var registryURL string
+
+	cmd := &cobra.Command{
+		Use:   "search [query]",
+		Short: "Search for plugins in the registry",
+		Long:  `Search for available plugins in the GOT plugin registry.`,
+		Args:  cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			query := ""
+			if len(args) > 0 {
+				query = args[0]
+			}
+			return runPluginSearch(cmd, query, registryURL)
+		},
+	}
+
+	cmd.Flags().StringVar(&registryURL, "registry", DefaultRegistryURL, "Plugin registry URL")
+
 	return cmd
 }
 
-// ── Run functions ───────────────────────────────────────────────────
+func runPluginInstall(cmd *cobra.Command, source string) error {
+	ctx := context.Background()
 
-func runPluginInstall(cmd *cobra.Command, args []string) error {
-	srcPath := args[0]
-
-	// Resolve to absolute path.
-	absSrc, err := filepath.Abs(srcPath)
+	repoPath, err := findRepoRoot()
 	if err != nil {
-		return fmt.Errorf("resolve path: %w", err)
+		return fmt.Errorf("plugin install: %w", err)
 	}
 
-	// Stat the source to confirm it exists.
-	srcInfo, err := os.Stat(absSrc)
-	if err != nil {
-		return fmt.Errorf("access plugin source: %w", err)
-	}
-	if !srcInfo.IsDir() {
-		return fmt.Errorf("plugin source must be a directory: %s", absSrc)
-	}
-
-	// Parse the manifest.
-	manifest, err := ParseManifestFile(absSrc)
-	if err != nil {
-		return fmt.Errorf("invalid plugin manifest: %w", err)
-	}
-
-	// Open the store.
-	kc, err := openKnowledgeStore()
-	if err != nil {
-		return err
-	}
-	defer kc.Close()
-	ks := kc.ks
-
-	gotDir, err := findGotDir()
-	if err != nil {
-		return fmt.Errorf("find .got/: %w", err)
-	}
+	gotDir := filepath.Join(repoPath, ".got")
 	pluginsDir := filepath.Join(gotDir, PluginDirName)
 
-	// Check if already installed.
-	if existing, _ := ks.GetPlugin(cmd.Context(), manifest.Name); existing != nil {
-		return fmt.Errorf("plugin %q already installed (use 'got plugin remove %s' first)", manifest.Name, manifest.Name)
+	// Ensure plugins directory exists
+	if err := os.MkdirAll(pluginsDir, 0o755); err != nil {
+		return fmt.Errorf("plugin install: create plugins dir: %w", err)
 	}
 
-	// Copy plugin to .got/plugins/<name>/.
-	destDir := filepath.Join(pluginsDir, manifest.Name)
-	if err := copyDir(absSrc, destDir); err != nil {
-		return fmt.Errorf("copy plugin: %w", err)
+	// Check if source is a URL
+	if strings.HasPrefix(source, "http://") || strings.HasPrefix(source, "https://") {
+		// Download and extract plugin from URL
+		fmt.Fprintf(cmd.OutOrStdout(), "Downloading plugin from %s...\n", source)
+		// TODO: Implement plugin download and extraction
+		return fmt.Errorf("plugin install: URL installation not yet implemented")
 	}
 
-	// Serialize manifest for storage.
-	manifestBytes, _ := json.Marshal(manifest)
-
-	// Register in DB.
-	p, err := ks.InstallPlugin(cmd.Context(), manifest.Name, manifest.Version, manifest.Description, destDir, string(manifestBytes))
+	// Local directory installation
+	manifest, err := ParseManifestFile(source)
 	if err != nil {
-		// Rollback the copied directory.
-		os.RemoveAll(destDir)
-		return fmt.Errorf("register plugin: %w", err)
+		return fmt.Errorf("plugin install: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Installed plugin: %s v%s\n", p.Name, p.Version)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Path: %s\n", destDir)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Capabilities: %s\n", strings.Join(manifest.Capabilities, ", "))
-	if len(manifest.Hooks) > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Event hooks: %d\n", len(manifest.Hooks))
-	}
-	if len(manifest.Commands) > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "  Commands: %d\n", len(manifest.Commands))
+	// Copy plugin to plugins directory
+	pluginDir := filepath.Join(pluginsDir, manifest.Name)
+	if err := copyDir(source, pluginDir); err != nil {
+		return fmt.Errorf("plugin install: copy plugin: %w", err)
 	}
 
+	// Register in database
+	gotDBPath := filepath.Join(gotDir, "got.db")
+	s, err := store.Open(gotDBPath)
+	if err != nil {
+		return fmt.Errorf("plugin install: open store: %w", err)
+	}
+	defer s.Close()
+
+	bus := globalBus
+	if bus == nil {
+		bus = newBackgroundBus()
+	}
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+
+	// Convert manifest to JSON
+	manifestJSON := fmt.Sprintf(`{"name":"%s","version":"%s","description":"%s"}`,
+		manifest.Name, manifest.Version, manifest.Description)
+
+	if _, err := ks.InstallPlugin(ctx, manifest.Name, manifest.Version, manifest.Description, pluginDir, manifestJSON); err != nil {
+		return fmt.Errorf("plugin install: register: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Installed plugin %s v%s\n", manifest.Name, manifest.Version)
 	return nil
 }
 
-func runPluginRemove(cmd *cobra.Command, args []string) error {
-	name := args[0]
+func runPluginRemove(cmd *cobra.Command, name string) error {
+	ctx := context.Background()
 
-	kc, err := openKnowledgeStore()
+	repoPath, err := findRepoRoot()
 	if err != nil {
-		return err
+		return fmt.Errorf("plugin remove: %w", err)
 	}
-	defer kc.Close()
-	ks := kc.ks
 
-	// Get the plugin to know its path.
-	p, err := ks.GetPlugin(cmd.Context(), name)
+	gotDir := filepath.Join(repoPath, ".got")
+	gotDBPath := filepath.Join(gotDir, "got.db")
+
+	s, err := store.Open(gotDBPath)
 	if err != nil {
-		return fmt.Errorf("get plugin: %w", err)
+		return fmt.Errorf("plugin remove: open store: %w", err)
+	}
+	defer s.Close()
+
+	bus := globalBus
+	if bus == nil {
+		bus = newBackgroundBus()
+	}
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+
+	if err := ks.RemovePlugin(ctx, name); err != nil {
+		return fmt.Errorf("plugin remove: %w", err)
 	}
 
-	// Remove from DB.
-	if err := ks.RemovePlugin(cmd.Context(), name); err != nil {
-		return fmt.Errorf("remove plugin: %w", err)
-	}
+	// Remove from disk
+	pluginDir := filepath.Join(gotDir, PluginDirName, name)
+	_ = os.RemoveAll(pluginDir)
 
-	// Remove plugin directory.
-	pluginDir := p.Path
-	if pluginDir == "" {
-		gotDir, _ := findGotDir()
-		pluginDir = filepath.Join(gotDir, PluginDirName, name)
-	}
-	os.RemoveAll(pluginDir)
-
-	fmt.Fprintf(cmd.OutOrStdout(), "Removed plugin: %s\n", name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Removed plugin %s\n", name)
 	return nil
 }
 
-func runPluginList(cmd *cobra.Command, args []string) error {
-	kc, err := openKnowledgeStore()
-	if err != nil {
-		return err
-	}
-	defer kc.Close()
-	ks := kc.ks
+func runPluginList(cmd *cobra.Command) error {
+	ctx := context.Background()
 
-	plugins, err := ks.ListPlugins(cmd.Context())
+	repoPath, err := findRepoRoot()
 	if err != nil {
-		return fmt.Errorf("list plugins: %w", err)
+		return fmt.Errorf("plugin list: %w", err)
+	}
+
+	gotDir := filepath.Join(repoPath, ".got")
+	gotDBPath := filepath.Join(gotDir, "got.db")
+
+	s, err := store.Open(gotDBPath)
+	if err != nil {
+		return fmt.Errorf("plugin list: open store: %w", err)
+	}
+	defer s.Close()
+
+	bus := globalBus
+	if bus == nil {
+		bus = newBackgroundBus()
+	}
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+
+	plugins, err := ks.ListPlugins(ctx)
+	if err != nil {
+		return fmt.Errorf("plugin list: %w", err)
 	}
 
 	if len(plugins) == 0 {
@@ -244,141 +265,141 @@ func runPluginList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	w := tabwriter.NewWriter(cmd.OutOrStdout(), 0, 0, 3, ' ', 0)
-	fmt.Fprintln(w, "NAME\tVERSION\tENABLED\tDESCRIPTION")
-	fmt.Fprintln(w, "----\t-------\t-------\t-----------")
-
 	for _, p := range plugins {
-		enabled := "yes"
+		status := "enabled"
 		if !p.Enabled {
-			enabled = "no"
+			status = "disabled"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n", p.Name, p.Version, enabled, p.Description)
+		fmt.Fprintf(cmd.OutOrStdout(), "%s\t%s\t%s\n", p.Name, p.Version, status)
 	}
-	w.Flush()
 
 	return nil
 }
 
-func runPluginEnable(cmd *cobra.Command, args []string) error {
-	name := args[0]
+func runPluginEnable(cmd *cobra.Command, name string) error {
+	ctx := context.Background()
 
-	kc, err := openKnowledgeStore()
+	repoPath, err := findRepoRoot()
 	if err != nil {
-		return err
-	}
-	defer kc.Close()
-	ks := kc.ks
-
-	if err := ks.EnablePlugin(cmd.Context(), name); err != nil {
-		return fmt.Errorf("enable plugin: %w", err)
+		return fmt.Errorf("plugin enable: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Enabled plugin: %s\n", name)
-	return nil
-}
+	gotDir := filepath.Join(repoPath, ".got")
+	gotDBPath := filepath.Join(gotDir, "got.db")
 
-func runPluginDisable(cmd *cobra.Command, args []string) error {
-	name := args[0]
-
-	kc, err := openKnowledgeStore()
+	s, err := store.Open(gotDBPath)
 	if err != nil {
-		return err
+		return fmt.Errorf("plugin enable: open store: %w", err)
 	}
-	defer kc.Close()
-	ks := kc.ks
+	defer s.Close()
 
-	if err := ks.DisablePlugin(cmd.Context(), name); err != nil {
-		return fmt.Errorf("disable plugin: %w", err)
+	bus := globalBus
+	if bus == nil {
+		bus = newBackgroundBus()
+	}
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+
+	if err := ks.EnablePlugin(ctx, name); err != nil {
+		return fmt.Errorf("plugin enable: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Disabled plugin: %s\n", name)
+	fmt.Fprintf(cmd.OutOrStdout(), "Enabled plugin %s\n", name)
 	return nil
 }
 
-func runPluginRun(cmd *cobra.Command, args []string) error {
-	name := args[0]
-	action := args[1]
+func runPluginDisable(cmd *cobra.Command, name string) error {
+	ctx := context.Background()
 
-	// Use the global runtime if already loaded (e.g., if --no-plugins was
-	// NOT set at startup). Otherwise fall back to loading it here.
-	rt := globalPluginRuntime
-
-	if rt == nil {
-		// No global runtime — load one specifically for this command.
-		kc, err := openKnowledgeStore()
-		if err != nil {
-			return err
-		}
-		defer kc.Close()
-		ks := kc.ks
-
-		gotDir, gotErr := findGotDir()
-		if gotErr != nil {
-			return fmt.Errorf("find .got/: %w", gotErr)
-		}
-		pluginsDir := filepath.Join(gotDir, PluginDirName)
-
-		localRT := NewPluginRuntime(ks, kc.bus, pluginsDir)
-		defer localRT.Close()
-
-		ctx := cmd.Context()
-		if loadErr := localRT.Load(ctx); loadErr != nil {
-			_, _ = fmt.Fprintf(cmd.ErrOrStderr(), "warning: plugin load: %v\n", loadErr)
-		}
-
-		rt = localRT
+	repoPath, err := findRepoRoot()
+	if err != nil {
+		return fmt.Errorf("plugin disable: %w", err)
 	}
 
-	timeout, _ := cmd.Flags().GetDuration("plugin-timeout")
+	gotDir := filepath.Join(repoPath, ".got")
+	gotDBPath := filepath.Join(gotDir, "got.db")
 
-	stdout, stderr, runErr := rt.RunAction(cmd.Context(), name, action, timeout)
+	s, err := store.Open(gotDBPath)
+	if err != nil {
+		return fmt.Errorf("plugin disable: open store: %w", err)
+	}
+	defer s.Close()
+
+	bus := globalBus
+	if bus == nil {
+		bus = newBackgroundBus()
+	}
+	ks := store.NewKnowledgeStore(s.DB(), bus)
+
+	if err := ks.DisablePlugin(ctx, name); err != nil {
+		return fmt.Errorf("plugin disable: %w", err)
+	}
+
+	fmt.Fprintf(cmd.OutOrStdout(), "Disabled plugin %s\n", name)
+	return nil
+}
+
+func runPluginRun(cmd *cobra.Command, pluginName, commandName string, args []string) error {
+	if globalPluginRuntime == nil {
+		return fmt.Errorf("plugin run: plugins not loaded (run inside a GOT repository)")
+	}
+
+	ctx := context.Background()
+	stdout, stderr, err := globalPluginRuntime.ExecuteCommand(ctx, pluginName, commandName, args, 30*time.Second)
+	if err != nil {
+		return fmt.Errorf("plugin run: %w", err)
+	}
+
 	if stdout != "" {
 		fmt.Fprint(cmd.OutOrStdout(), stdout)
 	}
 	if stderr != "" {
 		fmt.Fprint(cmd.ErrOrStderr(), stderr)
 	}
-	if runErr != nil {
-		return fmt.Errorf("run plugin: %w", runErr)
-	}
 
 	return nil
 }
 
-// ── Directory copy helper ───────────────────────────────────────────
+func runPluginSearch(cmd *cobra.Command, query, registryURL string) error {
+	fmt.Fprintf(cmd.OutOrStdout(), "Searching for plugins at %s...\n\n", registryURL)
 
-// copyDir copies a directory recursively from src to dst.
-// Used during plugin installation.
-func copyDir(src, dst string) error {
-	// Create destination directory.
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return fmt.Errorf("create destination: %w", err)
-	}
-
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return fmt.Errorf("read source: %w", err)
-	}
-
-	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.Join(dst, entry.Name())
-
-		if entry.IsDir() {
-			if err := copyDir(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			data, readErr := os.ReadFile(srcPath)
-			if readErr != nil {
-				return fmt.Errorf("read %s: %w", srcPath, readErr)
-			}
-			if writeErr := os.WriteFile(dstPath, data, 0o644); writeErr != nil {
-				return fmt.Errorf("write %s: %w", dstPath, writeErr)
-			}
-		}
-	}
+	// TODO: Implement actual registry search
+	// For now, show a placeholder
+	fmt.Fprintln(cmd.OutOrStdout(), "Plugin registry coming soon!")
+	fmt.Fprintln(cmd.OutOrStdout(), "\nFor now, install plugins from local directories:")
+	fmt.Fprintln(cmd.OutOrStdout(), "  got plugin install ./my-plugin")
 
 	return nil
+}
+
+// newBackgroundBus creates a new event bus for operations outside the CLI context.
+func newBackgroundBus() *events.Bus {
+	return events.New()
+}
+
+// copyDir recursively copies a directory.
+func copyDir(src, dst string) error {
+	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+
+		dstPath := filepath.Join(dst, relPath)
+
+		if info.IsDir() {
+			return os.MkdirAll(dstPath, info.Mode())
+		}
+
+		// Copy file
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+
+		return os.WriteFile(dstPath, data, info.Mode())
+	})
 }

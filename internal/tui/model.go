@@ -115,6 +115,7 @@ func NewModel() Model {
 	m.tabModels[theme.TabRemotes] = tabs.NewRemotesTab(adapter, repoPath)
 	m.tabModels[theme.TabGraph] = tabs.NewGraphTab(adapter, repoPath)
 	m.tabModels[theme.TabPlugins] = tabs.NewPluginsTab(ks)
+	m.tabModels[theme.TabKnowledge] = tabs.NewKnowledgeTab(ks)
 
 	return m
 }

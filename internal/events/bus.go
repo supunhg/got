@@ -3,8 +3,10 @@ package events
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 )
@@ -33,12 +35,20 @@ type Bus struct {
 	subs   map[string][]subscription
 	nextID uint64
 	closed bool
+
+	// Event history for replay and NDJSON streaming
+	history      []Event
+	historyMu    sync.RWMutex
+	maxHistory   int
+	subscribers  []chan Event
+	subscribersMu sync.RWMutex
 }
 
 // New creates and returns an initialized, ready-to-use Bus.
 func New() *Bus {
 	return &Bus{
-		subs: make(map[string][]subscription),
+		subs:       make(map[string][]subscription),
+		maxHistory: 1000, // keep last 1000 events
 	}
 }
 
@@ -89,6 +99,7 @@ func (b *Bus) Subscribe(eventType string, handler Handler) (func(), error) {
 // and returns all errors aggregated via errors.Join.
 //
 // Publish sets Event.Timestamp to the current time before dispatch.
+// Events are stored in history for replay and NDJSON streaming.
 //
 // Publish returns ErrBusClosed if the bus has been closed.
 func (b *Bus) Publish(ctx context.Context, eventType string, payload any) error {
@@ -100,7 +111,7 @@ func (b *Bus) Publish(ctx context.Context, eventType string, payload any) error 
 	}
 
 	subs := b.subs[eventType]
-	if len(subs) == 0 {
+	if len(subs) == 0 && len(b.subscribers) == 0 {
 		return nil
 	}
 
@@ -110,6 +121,25 @@ func (b *Bus) Publish(ctx context.Context, eventType string, payload any) error 
 		Timestamp: time.Now(),
 	}
 
+	// Store in history
+	b.historyMu.Lock()
+	b.history = append(b.history, e)
+	if len(b.history) > b.maxHistory {
+		b.history = b.history[len(b.history)-b.maxHistory:]
+	}
+	b.historyMu.Unlock()
+
+	// Notify NDJSON subscribers
+	b.subscribersMu.RLock()
+	for _, ch := range b.subscribers {
+		select {
+		case ch <- e:
+		default:
+			// Don't block if subscriber is full
+		}
+	}
+	b.subscribersMu.RUnlock()
+
 	var errs []error
 	for _, sub := range subs {
 		if err := sub.handler(ctx, e); err != nil {
@@ -118,6 +148,73 @@ func (b *Bus) Publish(ctx context.Context, eventType string, payload any) error 
 	}
 
 	return errors.Join(errs...)
+}
+
+// Replay returns all events from history, optionally filtered by event type.
+// If eventType is empty, all events are returned.
+func (b *Bus) Replay(eventType string) []Event {
+	b.historyMu.RLock()
+	defer b.historyMu.RUnlock()
+
+	if eventType == "" {
+		result := make([]Event, len(b.history))
+		copy(result, b.history)
+		return result
+	}
+
+	var result []Event
+	for _, e := range b.history {
+		if e.Type == eventType {
+			result = append(result, e)
+		}
+	}
+	return result
+}
+
+// SubscribeNDJSON creates a new NDJSON event stream. It returns a channel
+// that receives events and an unsubscribe function. Events are written to
+// the provided writer as NDJSON (one JSON object per line).
+func (b *Bus) SubscribeNDJSON(writer io.Writer) (func(), error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.closed {
+		return nil, ErrBusClosed
+	}
+
+	ch := make(chan Event, 100)
+	b.subscribersMu.Lock()
+	b.subscribers = append(b.subscribers, ch)
+	b.subscribersMu.Unlock()
+
+	// Start goroutine to write events as NDJSON
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for e := range ch {
+			data, err := json.Marshal(e)
+			if err != nil {
+				continue
+			}
+			data = append(data, '\n')
+			_, _ = writer.Write(data)
+		}
+	}()
+
+	unsubscribe := func() {
+		b.subscribersMu.Lock()
+		defer b.subscribersMu.Unlock()
+		for i, sub := range b.subscribers {
+			if sub == ch {
+				b.subscribers = append(b.subscribers[:i], b.subscribers[i+1:]...)
+				break
+			}
+		}
+		close(ch)
+		<-done
+	}
+
+	return unsubscribe, nil
 }
 
 // Close prevents any further Subscribe or Publish calls and clears all

@@ -22,8 +22,11 @@ func TestTabConstants(t *testing.T) {
 	if TabPlugins != 4 {
 		t.Errorf("TabPlugins = %d, want 4", TabPlugins)
 	}
-	if TabCount != 5 {
-		t.Errorf("TabCount = %d, want 5", TabCount)
+	if TabKnowledge != 5 {
+		t.Errorf("TabKnowledge = %d, want 5", TabKnowledge)
+	}
+	if TabCount != 6 {
+		t.Errorf("TabCount = %d, want 6", TabCount)
 	}
 }
 
@@ -38,6 +41,7 @@ func TestTabNames(t *testing.T) {
 		" Remotes ",
 		" Graph ",
 		" Plugins ",
+		" Knowledge ",
 	}
 
 	for i, want := range expected {

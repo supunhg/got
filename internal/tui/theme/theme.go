@@ -91,18 +91,20 @@ var (
 
 // Tab indices
 const (
-	TabStatus   = 0
-	TabBranches = 1
-	TabRemotes  = 2
-	TabGraph    = 3
-	TabPlugins  = 4
-	TabCount    = 5
+	TabStatus    = 0
+	TabBranches  = 1
+	TabRemotes   = 2
+	TabGraph     = 3
+	TabPlugins   = 4
+	TabKnowledge = 5
+	TabCount     = 6
 )
 
 var TabNames = [TabCount]string{
-	TabStatus:   " Status ",
-	TabBranches: " Branches ",
-	TabRemotes:  " Remotes ",
-	TabGraph:    " Graph ",
-	TabPlugins:  " Plugins ",
+	TabStatus:    " Status ",
+	TabBranches:  " Branches ",
+	TabRemotes:   " Remotes ",
+	TabGraph:     " Graph ",
+	TabPlugins:   " Plugins ",
+	TabKnowledge: " Knowledge ",
 }

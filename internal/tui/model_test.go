@@ -149,7 +149,7 @@ func TestModelUpdateHelp(t *testing.T) {
 
 func TestModelUpdateTabWrap(t *testing.T) {
 	m := Model{
-		activeTab: theme.TabPlugins, // last tab
+		activeTab: theme.TabKnowledge, // last tab
 		keys:      DefaultKeyMap(),
 		tabModels: [theme.TabCount]tea.Model{},
 	}
