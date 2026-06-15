@@ -27,11 +27,11 @@ type GraphTab struct {
 	err      error
 
 	// Virtualization state
-	nodes      []git.GraphNode
-	page       int
+	nodes       []git.GraphNode
+	page        int
 	totalLoaded int
-	allLoaded  bool
-	content    string
+	allLoaded   bool
+	content     string
 }
 
 // NewGraphTab creates a new Graph tab.
