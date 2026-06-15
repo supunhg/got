@@ -37,10 +37,10 @@ type Bus struct {
 	closed bool
 
 	// Event history for replay and NDJSON streaming
-	history      []Event
-	historyMu    sync.RWMutex
-	maxHistory   int
-	subscribers  []chan Event
+	history       []Event
+	historyMu     sync.RWMutex
+	maxHistory    int
+	subscribers   []chan Event
 	subscribersMu sync.RWMutex
 }
 

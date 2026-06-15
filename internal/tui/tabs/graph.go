@@ -74,7 +74,8 @@ func (t *GraphTab) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !t.allLoaded && !t.loading {
 			t.loading = true
 			t.page++
-			return t, t.loadGraphPage(t.page)
+			cmd := t.loadGraphPage(t.page)
+			return t, cmd
 		}
 		return t, nil
 	}

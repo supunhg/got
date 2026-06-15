@@ -186,7 +186,7 @@ func runPluginInstall(cmd *cobra.Command, source string) error {
 	ks := store.NewKnowledgeStore(s.DB(), bus)
 
 	// Convert manifest to JSON
-	manifestJSON := fmt.Sprintf(`{"name":"%s","version":"%s","description":"%s"}`,
+	manifestJSON := fmt.Sprintf(`{"name":%q,"version":%q,"description":%q}`,
 		manifest.Name, manifest.Version, manifest.Description)
 
 	if _, err := ks.InstallPlugin(ctx, manifest.Name, manifest.Version, manifest.Description, pluginDir, manifestJSON); err != nil {
