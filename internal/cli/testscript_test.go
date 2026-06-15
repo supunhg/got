@@ -15,7 +15,8 @@ func TestScript(t *testing.T) {
 	testscript.Run(t, testscript.Params{
 		Dir: filepath.Join("testdata", "testscript"),
 		Setup: func(env *testscript.Env) error {
-			env.Vars = append(env.Vars,
+			env.Vars = append(
+				env.Vars,
 				"GOT_BIN="+gotBin,
 			)
 			return nil
