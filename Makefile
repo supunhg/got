@@ -21,7 +21,7 @@ LDFLAGS := -s -w \
            -X github.com/supunhg/got/internal/version.Date=$(DATE)
 
 # ---- Targets ------------------------------------------------------------
-.PHONY: help build run smoke test test-race lint fmt fmt-check vet tidy clean ci check-paths
+.PHONY: help build run smoke test test-race test-e2e lint fmt fmt-check vet tidy clean ci check-paths release
 
 help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z_-]+:.*?## / {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -41,6 +41,9 @@ test: ## Run unit tests
 
 test-race: ## Run unit tests with -race
 	$(GO) test -race ./...
+
+test-e2e: ## Run E2E tests (testscript)
+	$(GO) test -v -count=1 -run TestScript ./internal/cli/...
 
 lint: ## Run golangci-lint
 	golangci-lint run
@@ -86,3 +89,6 @@ check-paths:
 		exit 1; \
 	fi
 	@echo "check-paths: ok"
+
+release: ## Run GoReleaser (snapshot mode for local testing)
+	goreleaser release --snapshot --clean

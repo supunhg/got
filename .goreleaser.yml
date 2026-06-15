@@ -1,0 +1,83 @@
+# GoReleaser configuration for GOT
+# https://goreleaser.com
+
+version: 2
+
+project_name: got
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: got
+    main: ./cmd/got
+    binary: got
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/supunhg/got/internal/version.Version={{.Version}}
+      - -X github.com/supunhg/got/internal/version.Commit={{.ShortCommit}}
+      - -X github.com/supunhg/got/internal/version.Date={{.Date}}
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+
+brews:
+  - repository:
+      owner: supunhg
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: "https://github.com/supunhg/got"
+    description: "Git-native developer operating layer"
+    license: "MIT"
+    install: |
+      bin.install "got"
+      bash_completion.install Utils.safe_popen_read("#{bin}/got", "completion", "bash").output => "got"
+      zsh_completion.install Utils.safe_popen_read("#{bin}/got", "completion", "zsh").output => "_got"
+      fish_completion.install Utils.safe_popen_read("#{bin}/got", "completion", "fish").output => "got.fish"
+    test: |
+      system "#{bin}/got", "--version"
+
+release:
+  github:
+    owner: supunhg
+    name: got
+  draft: false
+  prerelease: auto

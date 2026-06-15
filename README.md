@@ -113,6 +113,32 @@ got remote list                   # remotes with push/pull
 got status --json                 # machine-readable output
 ```
 
+### Interactive TUI
+
+Launch the terminal dashboard for a visual overview of your repository.
+
+```bash
+got tui
+```
+
+**Keybindings:**
+
+| Key | Action |
+|---|---|
+| `h` / `l` | Switch tabs (left/right) |
+| `j` / `k` | Scroll content (down/up) |
+| `r` | Refresh data |
+| `?` | Toggle help |
+| `q` | Quit |
+
+**Tabs:**
+
+- **Status** — working tree overview (staged, unstaged, untracked)
+- **Branches** — local and remote branches with current highlight
+- **Remotes** — remote URLs and push configuration
+- **Graph** — text-based commit graph with SHA and refs
+- **Plugins** — installed plugins, commands, and hooks
+
 ### Plugin System
 
 Extend GOT with external scripts that subscribe to events.
@@ -142,10 +168,13 @@ Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as
 ```
 cmd/got/                  Entrypoint
 internal/
-├── cli/                  Cobra command tree (16+ commands)
+├── cli/                  Cobra command tree (18+ commands)
 ├── git/                  Git adapter (os/exec, no libgit2)
 ├── store/                SQLite storage (modernc.org/sqlite, no CGo)
 ├── events/               In-memory event bus (21 event types)
+├── tui/                  Interactive dashboard (Bubbletea)
+│   ├── theme/            Tokyo Night color theme
+│   └── tabs/             Status, Branches, Remotes, Graph, Plugins
 └── version/              Build-time version stamping
 ```
 

@@ -38,6 +38,9 @@ jobs:
       - name: Test
         run: go test -race -count=1 ./...
 
+      - name: Test E2E
+        run: go test -v -count=1 -run TestScript ./internal/cli/...
+
       - name: Build
         run: go build -o /dev/null ./cmd/got
 
