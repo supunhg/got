@@ -24,6 +24,9 @@ git clone https://github.com/supunhg/got.git
 cd got
 make build
 # binary is at ./bin/got
+
+# Via Homebrew (macOS/Linux)
+brew install supunhg/tap/got
 ```
 
 ### Get Started
@@ -107,10 +110,39 @@ got github issue list --workspace oauth
 ### Core Git Commands (Enhanced)
 
 ```bash
-got graph                         # text-based commit graph
+got graph                         # text-based commit graph (virtualized for large repos)
 got branch                        # list with upstream info
 got remote list                   # remotes with push/pull
 got status --json                 # machine-readable output
+```
+
+### Worktrees
+
+Manage multiple working directories on the same repository.
+
+```bash
+got worktree list                 # list all worktrees
+got worktree create ../feature-a feat/branch-a  # create worktree
+got worktree delete ../feature-a  # remove worktree
+```
+
+### Submodules
+
+Manage Git submodules directly from GOT.
+
+```bash
+got submodule list                # list all submodules
+got submodule init                # initialize all submodules
+got submodule update              # update all submodules
+got submodule init my-lib         # initialize specific submodule
+```
+
+### Repository Templates
+
+Bootstrap a new project from a template.
+
+```bash
+got init --template https://example.com/got.yml  # use remote template
 ```
 
 ### Interactive TUI
@@ -168,13 +200,18 @@ Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as
 ```
 cmd/got/                  Entrypoint
 internal/
-├── cli/                  Cobra command tree (18+ commands)
+├── cli/                  Cobra command tree (22+ commands)
+│   ├── worktree.go       Worktree management
+│   ├── submodule.go      Submodule management
+│   └── ...               Other commands
 ├── git/                  Git adapter (os/exec, no libgit2)
+│   ├── adapter.go        Interface + Worktree/Submodule types
+│   └── remote_graph.go   Remote, Graph, Worktree, Submodule impls
 ├── store/                SQLite storage (modernc.org/sqlite, no CGo)
-├── events/               In-memory event bus (21 event types)
+├── events/               In-memory event bus (23 event types)
 ├── tui/                  Interactive dashboard (Bubbletea)
 │   ├── theme/            Tokyo Night color theme
-│   └── tabs/             Status, Branches, Remotes, Graph, Plugins
+│   └── tabs/             Status, Branches, Remotes, Graph (virtualized), Plugins
 └── version/              Build-time version stamping
 ```
 
@@ -209,7 +246,9 @@ See [`ROADMAP.md`](ROADMAP.md) for the project roadmap.
 make build          # compile to bin/got
 make test           # run unit tests
 make test-race      # tests with race detector
+make test-e2e       # run E2E tests (testscript)
 make ci             # full CI gate: fmt-check + lint + vet + test + check-paths
+make release        # GoReleaser snapshot build
 ```
 
 ### Shell Completions
