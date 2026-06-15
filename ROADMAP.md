@@ -84,6 +84,14 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - TUI unit tests: theme styles/colors, model keybindings/view
 - All 168 tests pass (154 unit + 14 TUI tests)
 
+### v1.3 — Power Features
+- Graph virtualization: lazy-loading with viewport for large repos
+- Worktree commands: `got worktree list/create/delete`
+- Submodule commands: `got submodule list/init/update`
+- Repository templates: `got init --template <url>`
+- Added Worktree/Submodule types to git adapter
+- Added WorktreeCreated/Deleted events
+
 ## Design Principles
 
 These principles guide all design decisions:
