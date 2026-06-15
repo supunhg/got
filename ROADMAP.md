@@ -75,6 +75,15 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - E2E test suite using testscript: 4 scenarios (core_workflow, safe_ops, workspace_sync, onboarding)
 - All 150+ unit tests pass, E2E tests pass
 
+### v1.2 — Polish & Release
+- GoReleaser config for cross-platform builds (darwin/linux/windows × amd64/arm64)
+- Homebrew tap auto-publish to `supunhg/homebrew-tap`
+- CI: added E2E test step to GitHub Actions
+- Makefile: added `test-e2e` and `release` targets
+- README: documented `got tui` command with keybindings and tab descriptions
+- TUI unit tests: theme styles/colors, model keybindings/view
+- All 168 tests pass (154 unit + 14 TUI tests)
+
 ## Design Principles
 
 These principles guide all design decisions:
