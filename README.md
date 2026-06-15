@@ -168,8 +168,9 @@ got tui
 - **Status** — working tree overview (staged, unstaged, untracked)
 - **Branches** — local and remote branches with current highlight
 - **Remotes** — remote URLs and push configuration
-- **Graph** — text-based commit graph with SHA and refs
+- **Graph** — text-based commit graph with SHA and refs (virtualized)
 - **Plugins** — installed plugins, commands, and hooks
+- **Knowledge** — decisions and notes with status colors
 
 ### Plugin System
 
@@ -179,6 +180,7 @@ Extend GOT with external scripts that subscribe to events.
 got plugin install ./my-plugin    # install from local directory
 got plugin list                   # show installed plugins
 got plugin run hello-world greet  # run a plugin command
+got plugin search                 # search plugin registry
 ```
 
 Plugins subscribe to events like `CommitCreated`, `WorkspaceUpdated`, and run as isolated subprocesses.
