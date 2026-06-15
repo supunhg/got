@@ -66,6 +66,15 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - testscript scenarios for all major workflows
 - Integration test coverage
 
+## Completed Milestones
+
+### v1.1 — TUI & E2E Tests
+- Interactive TUI dashboard (`got tui`) with Bubbletea: Status, Branches, Remotes, Graph, Plugins tabs
+- Vim-style keybindings (h/l tabs, j/k scroll, q quit, r refresh, ? help)
+- Tokyo Night dark theme via separate `internal/tui/theme/` package
+- E2E test suite using testscript: 4 scenarios (core_workflow, safe_ops, workspace_sync, onboarding)
+- All 150+ unit tests pass, E2E tests pass
+
 ## Design Principles
 
 These principles guide all design decisions:
