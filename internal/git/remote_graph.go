@@ -208,3 +208,153 @@ func (a *ExecAdapter) GetGraph(ctx context.Context, branch string, maxCount int)
 
 	return nodes, nil
 }
+
+// ListWorktrees lists all worktrees in the repository.
+func (a *ExecAdapter) ListWorktrees(ctx context.Context) ([]Worktree, error) {
+	stdout, _, err := a.run(ctx, "worktree", "list", "--porcelain")
+	if err != nil {
+		return nil, fmt.Errorf("list worktrees: %w", err)
+	}
+
+	var worktrees []Worktree
+	var current Worktree
+
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			if current.Path != "" {
+				worktrees = append(worktrees, current)
+				current = Worktree{}
+			}
+			continue
+		}
+
+		switch {
+		case strings.HasPrefix(line, "worktree "):
+			current.Path = strings.TrimPrefix(line, "worktree ")
+		case strings.HasPrefix(line, "HEAD "):
+			current.Head = strings.TrimPrefix(line, "HEAD ")
+		case strings.HasPrefix(line, "branch "):
+			branch := strings.TrimPrefix(line, "branch ")
+			// Remove refs/heads/ prefix
+			branch = strings.TrimPrefix(branch, "refs/heads/")
+			current.Branch = branch
+		}
+	}
+
+	// Don't forget the last one
+	if current.Path != "" {
+		worktrees = append(worktrees, current)
+	}
+
+	return worktrees, nil
+}
+
+// CreateWorktree creates a new worktree at the given path for the specified branch.
+func (a *ExecAdapter) CreateWorktree(ctx context.Context, path, branch string) error {
+	args := []string{"worktree", "add", path}
+	if branch != "" {
+		args = append(args, branch)
+	}
+
+	_, stderr, err := a.run(ctx, args...)
+	if err != nil {
+		return fmt.Errorf("create worktree: %w\n%s", err, stderr)
+	}
+
+	if a.bus != nil {
+		_ = a.bus.Publish(ctx, events.EventWorktreeCreated, events.WorktreeCreatedPayload{
+			Path:      path,
+			Branch:    branch,
+			CreatedAt: nowMS(),
+		})
+	}
+
+	return nil
+}
+
+// DeleteWorktree removes the worktree at the given path.
+func (a *ExecAdapter) DeleteWorktree(ctx context.Context, path string) error {
+	_, stderr, err := a.run(ctx, "worktree", "remove", path)
+	if err != nil {
+		return fmt.Errorf("delete worktree: %w\n%s", err, stderr)
+	}
+
+	if a.bus != nil {
+		_ = a.bus.Publish(ctx, events.EventWorktreeDeleted, events.WorktreeDeletedPayload{
+			Path:      path,
+			DeletedAt: nowMS(),
+		})
+	}
+
+	return nil
+}
+
+// ListSubmodules lists all submodules in the repository.
+func (a *ExecAdapter) ListSubmodules(ctx context.Context) ([]Submodule, error) {
+	stdout, _, err := a.run(ctx, "submodule", "status")
+	if err != nil {
+		// If no submodules, git returns empty output (not an error)
+		if strings.Contains(err.Error(), "not a submodule") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list submodules: %w", err)
+	}
+
+	var submodules []Submodule
+	for _, line := range strings.Split(stdout, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		// Format: " <status> <sha> <name> (<url>)"
+		// Status can be ' ', '-', '+', 'U'
+		if len(line) < 2 {
+			continue
+		}
+
+		// Skip status character
+		line = line[1:]
+
+		parts := strings.Fields(line)
+		if len(parts) < 3 {
+			continue
+		}
+
+		sub := Submodule{
+			Name: parts[1],
+			Path: parts[1], // Path is usually the same as name
+		}
+
+		// Extract URL from parentheses
+		if len(parts) >= 3 {
+			url := parts[2]
+			url = strings.TrimPrefix(url, "(")
+			url = strings.TrimSuffix(url, ")")
+			sub.URL = url
+		}
+
+		submodules = append(submodules, sub)
+	}
+
+	return submodules, nil
+}
+
+// InitSubmodule initializes a submodule.
+func (a *ExecAdapter) InitSubmodule(ctx context.Context, name string) error {
+	_, stderr, err := a.run(ctx, "submodule", "init", name)
+	if err != nil {
+		return fmt.Errorf("init submodule %q: %w\n%s", name, err, stderr)
+	}
+	return nil
+}
+
+// UpdateSubmodule updates a submodule.
+func (a *ExecAdapter) UpdateSubmodule(ctx context.Context, name string) error {
+	_, stderr, err := a.run(ctx, "submodule", "update", name)
+	if err != nil {
+		return fmt.Errorf("update submodule %q: %w\n%s", name, err, stderr)
+	}
+	return nil
+}

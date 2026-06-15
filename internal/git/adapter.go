@@ -68,6 +68,21 @@ type GraphNode struct {
 	Refs    string   `json:"refs,omitempty"`
 }
 
+// Worktree represents a Git worktree.
+type Worktree struct {
+	Path   string `json:"path"`
+	Branch string `json:"branch"`
+	Head   string `json:"head"`
+}
+
+// Submodule represents a Git submodule.
+type Submodule struct {
+	Name   string `json:"name"`
+	Path   string `json:"path"`
+	URL    string `json:"url"`
+	Branch string `json:"branch,omitempty"`
+}
+
 // PushResult holds the output of a push operation.
 type PushResult struct {
 	Output string `json:"output"`
@@ -118,6 +133,16 @@ type GitAdapter interface {
 
 	// Graph returns the commit graph structure for visualization.
 	GetGraph(ctx context.Context, branch string, maxCount int) ([]GraphNode, error)
+
+	// Worktree operations.
+	ListWorktrees(ctx context.Context) ([]Worktree, error)
+	CreateWorktree(ctx context.Context, path, branch string) error
+	DeleteWorktree(ctx context.Context, path string) error
+
+	// Submodule operations.
+	ListSubmodules(ctx context.Context) ([]Submodule, error)
+	InitSubmodule(ctx context.Context, name string) error
+	UpdateSubmodule(ctx context.Context, name string) error
 }
 
 // ── ExecAdapter ─────────────────────────────────────────────────────

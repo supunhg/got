@@ -73,6 +73,10 @@ const (
 	EventIssueCreated        = "IssueCreated"
 	EventPullRequestReviewed = "PullRequestReviewed"
 	EventPullRequestMerged   = "PullRequestMerged"
+
+	// Worktrees
+	EventWorktreeCreated = "WorktreeCreated"
+	EventWorktreeDeleted = "WorktreeDeleted"
 )
 
 // ── Typed payloads ──────────────────────────────────────────────────
@@ -315,4 +319,17 @@ type PullRequestMergedPayload struct {
 	PRNumber       int    `json:"pr_number"`
 	MergeCommitSHA string `json:"merge_commit_sha,omitempty"`
 	MergedAt       int64  `json:"merged_at"`
+}
+
+// WorktreeCreatedPayload is published when a worktree is created.
+type WorktreeCreatedPayload struct {
+	Path      string `json:"path"`
+	Branch    string `json:"branch"`
+	CreatedAt int64  `json:"created_at"`
+}
+
+// WorktreeDeletedPayload is published when a worktree is deleted.
+type WorktreeDeletedPayload struct {
+	Path      string `json:"path"`
+	DeletedAt int64  `json:"deleted_at"`
 }

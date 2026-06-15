@@ -3,10 +3,13 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -16,6 +19,7 @@ import (
 // newInitCmd returns the `got init` subcommand.
 func newInitCmd() *cobra.Command {
 	var force bool
+	var template string
 
 	cmd := &cobra.Command{
 		Use:   "init [path]",
@@ -31,20 +35,22 @@ Run inside a Git repository, or pass a path to one.
 Examples:
   got init                       # init in current directory (must be in a Git repo)
   got init /path/to/repo         # init in a specific repo
-  got init --force               # re-init (preserves DB, overwrites config)`,
+  got init --force               # re-init (preserves DB, overwrites config)
+  got init --template https://example.com/got.yml  # use template`,
 
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runInit(cmd, args, force)
+			return runInit(cmd, args, force, template)
 		},
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Re-initialize (preserves DB, overwrites config)")
+	cmd.Flags().StringVar(&template, "template", "", "URL to a got.yml template file")
 
 	return cmd
 }
 
-func runInit(cmd *cobra.Command, args []string, force bool) error {
+func runInit(cmd *cobra.Command, args []string, force bool, template string) error {
 	// ── Determine target directory ───────────────────────────────
 	target := "."
 	if len(args) > 0 {
@@ -113,7 +119,18 @@ func runInit(cmd *cobra.Command, args []string, force bool) error {
 	// ── Write got.yml ────────────────────────────────────────────
 	projectName := filepath.Base(repoRoot)
 	gotYmlPath := filepath.Join(repoRoot, "got.yml")
-	gotYml := fmt.Sprintf(`# GOT project configuration
+
+	var gotYml string
+	if template != "" {
+		// Download template from URL
+		content, err := downloadTemplate(template)
+		if err != nil {
+			return fmt.Errorf("init: download template: %w", err)
+		}
+		gotYml = content
+		fmt.Fprintf(cmd.OutOrStdout(), "  Downloaded template from %s\n", template)
+	} else {
+		gotYml = fmt.Sprintf(`# GOT project configuration
 # See https://got.sh/docs for more information.
 version: 1
 project:
@@ -128,6 +145,7 @@ plugins:
 ai:
   provider: heuristic
 `, projectName)
+	}
 
 	if err := os.WriteFile(gotYmlPath, []byte(gotYml), 0o644); err != nil {
 		return fmt.Errorf("init: write got.yml: %w", err)
@@ -226,4 +244,28 @@ func findGitDir(start string) (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// downloadTemplate downloads a got.yml template from a URL.
+func downloadTemplate(url string) (string, error) {
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	resp, err := client.Get(url)
+	if err != nil {
+		return "", fmt.Errorf("download template: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("download template: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("download template: read body: %w", err)
+	}
+
+	return string(body), nil
 }
