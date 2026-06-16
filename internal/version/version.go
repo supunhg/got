@@ -15,9 +15,9 @@ import (
 	"strings"
 )
 
-// Version is the GOT semantic version (e.g. "0.1.0"). Defaults to "dev" for
+// Version is the GOT semantic version (e.g. "2.0.0"). Defaults to "dev" for
 // builds that did not inject a value.
-var Version = "1.0.0"
+var Version = "2.0.0"
 
 // Commit is the short git SHA the binary was built from, or "none" if the
 // build did not inject one.

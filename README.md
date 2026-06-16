@@ -1,5 +1,6 @@
 # GOT — Git-Native Developer Operating Layer
 
+[![Version](https://img.shields.io/badge/version-v2.0.0-blue.svg)](https://github.com/supunhg/got/releases/tag/v2.0.0)
 [![Go Version](https://img.shields.io/badge/Go-1.25-blue)](https://go.dev)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![CI](https://github.com/supunhg/got/actions/workflows/ci.yml/badge.svg)](https://github.com/supunhg/got/actions/workflows/ci.yml)

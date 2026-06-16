@@ -2,7 +2,7 @@
 
 GOT is a Git-native developer operating layer. This document outlines what's built, what's in progress, and what's planned.
 
-## Current Status (v1.0.0)
+## Current Status (v2.0.0)
 
 | Feature | Status | Details |
 |---|---|---|
@@ -10,14 +10,19 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 | Core CLI | ✅ Complete | `init`, `status`, `commit`, `branch`, `graph`, `remote` |
 | Knowledge Engine | ✅ Complete | Decisions, notes, search, onboarding — 73 tests |
 | Workspace Engine | ✅ Complete | 12 subcommands, Git integration, PR/issue display |
-| Plugin Runtime v2 | ✅ Complete | Install/remove/enable/disable/run, event hooks, sample plugin |
 | GitHub Integration | ✅ Complete | Auth, PR/issue CRUD, review, merge, diff, workspace linking |
-| Event System | ✅ Complete | 21 event types, thread-safe pub/sub, event logger |
+| Event System | ✅ Complete | 23 event types, thread-safe pub/sub, event logger, replay history (1000 events), NDJSON streaming |
 | Snapshot Engine | ✅ Complete | Create/list/show/delete, auto-snapshot before destructive ops |
 | Safe Operations | ✅ Complete | `got safe reset/push/rebase` with automatic snapshots |
-| CI | ✅ Complete | GitHub Actions (test, vet, lint, format, build) |
+| CI | ✅ Complete | GitHub Actions (test, vet, lint, format, build, E2E) |
 | Shell Completions | ✅ Complete | bash, zsh, fish, powershell via `got completion` |
 | Health Check | ✅ Complete | `got health` validates .got/, DB, Git, workspace consistency |
+| Interactive TUI | ✅ Complete | Bubbletea dashboard with 6 tabs (Status, Branches, Remotes, Graph, Plugins, Knowledge) |
+| Graph Virtualization | ✅ Complete | Lazy-loading viewport for 10k+ commit repos |
+| Worktree Commands | ✅ Complete | `got worktree list/create/delete` |
+| Submodule Commands | ✅ Complete | `got submodule list/init/update` |
+| Repository Templates | ✅ Complete | `got init --template <url>` |
+| Plugin Ecosystem | ✅ Complete | Event replay, NDJSON streaming, plugin search, install/remove/list/enable/disable/run |
 
 ## Completed Milestones
 
@@ -56,17 +61,15 @@ GOT is a Git-native developer operating layer. This document outlines what's bui
 - GitHub Actions CI (test, vet, lint, format check, build)
 - CLI-level tests for all new commands
 
-## Next Up (v1.1)
+## Next Up (v2.1)
 
-### Rich TUI
-- Interactive terminal dashboard with Bubbletea
-- Status, branches, remotes, graph, plugins tabs
+### Plugin Registry
+- Remote plugin discovery and installation
+- Plugin versioning and dependency resolution
 
-### E2E Test Suite
-- testscript scenarios for all major workflows
-- Integration test coverage
-
-## Completed Milestones
+### Performance & Scale
+- Large-repo benchmarks (10k+ commits, 10k+ decisions)
+- Indexing layer for fast search
 
 ### v1.1 — TUI & E2E Tests
 - Interactive TUI dashboard (`got tui`) with Bubbletea: Status, Branches, Remotes, Graph, Plugins tabs
